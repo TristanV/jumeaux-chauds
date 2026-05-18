@@ -50,6 +50,17 @@ Phase 7 : Tests
 Phase 8 : Extensions (facultatif)
 ```
 
+### Statut global
+
+- [x] Phase 1 — Fondations
+- [ ] Phase 2 — Simulation
+- [ ] Phase 3 — MQTT
+- [ ] Phase 4 — API FastAPI
+- [ ] Phase 5 — Dashboard Streamlit
+- [ ] Phase 6 — Déploiement Docker
+- [ ] Phase 7 — Tests (intégration et compléments)
+- [ ] Phase 8 — Extensions pédagogiques
+
 ---
 
 ## Phase 1 — Fondations

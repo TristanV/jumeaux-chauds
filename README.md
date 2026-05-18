@@ -18,6 +18,14 @@ Il est conçu comme support pédagogique pour des étudiants en data engineering
 
 ---
 
+## Statut du projet
+
+- ✅ **Phase 1 — Fondations** : structure du projet, configuration YAML hiérarchique, modèle physique thermique, socle de tests unitaires (config + physique).
+- 🚧 **Phase 2 — Simulation** : implémentation de `MachineSimulator`, `ScenarioEngine`, `FaultScheduler` et `ClusterSimulator` à partir des spécifications.
+- ⏳ **Phases 3 à 6** : couche MQTT, API FastAPI, dashboard Streamlit et stack Docker complète encore à implémenter.
+
+---
+
 ## Fonctionnalités principales
 
 - **Simulation physique** : modèle thermique du 1er ordre (température, puissance, vitesse des ventilateurs) avec états persistants (`ON` / `OFF` / `DEGRADED`)
