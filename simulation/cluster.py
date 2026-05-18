@@ -109,6 +109,9 @@ class ClusterSimulator:
         Utilise get_machine_config() pour merger le profil de rôle avec
         les surcharges individuelles de chaque machine, conformément à la
         structure de base.yaml (cluster.role_profiles.{role}.thermal / .fans).
+
+        L'état initial de chaque machine est déterminé par la clé
+        ``initial_status`` (priorité : machine > role_profile, défaut : "off").
         """
         cluster_cfg = self._cfg["cluster"]
         tick_rate_hz = float(self._cfg["simulation"]["tick_rate_hz"])
@@ -162,6 +165,19 @@ class ClusterSimulator:
                 sensor_configs=sensor_configs,
                 fan_count=fan_count,
             )
+
+            # ── État initial ──────────────────────────────────────────────────
+            # Priorité : surcharge individuelle > role_profile > défaut "off"
+            role_profile = cluster_cfg["role_profiles"].get(role, {})
+            initial_status = (
+                m_entry.get("initial_status")
+                or role_profile.get("initial_status", "off")
+            )
+            if initial_status == "on":
+                machine.power_on()
+                logger.debug("Machine %s démarrée (initial_status=on)", machine_id)
+            # ─────────────────────────────────────────────────────────────────
+
             self.machines[machine_id] = machine
 
     # ------------------------------------------------------------------
@@ -246,7 +262,7 @@ class ClusterSimulator:
                 await publisher.publish_telemetry(snap)
 
                 # Changement de statut ?
-                mid = machine.machine_id
+                mid = machine.id
                 current_status = snap.get("status", "")
                 if self._prev_status.get(mid) != current_status:
                     self._prev_status[mid] = current_status

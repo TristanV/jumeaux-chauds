@@ -56,7 +56,7 @@ Phase 8 : Extensions (facultatif)
 - [x] Phase 2 — Simulation
 - [x] Phase 3 — MQTT
 - [x] Phase 4 — API FastAPI
-- [ ] Phase 5 — Dashboard Streamlit
+- [x] Phase 5 — Dashboard Streamlit
 - [ ] Phase 6 — Déploiement Docker
 - [ ] Phase 7 — Tests (intégration et compléments)
 - [ ] Phase 8 — Extensions pédagogiques
@@ -182,8 +182,6 @@ Phase 8 : Extensions (facultatif)
 
 ### Étape 4.1 — Lifespan et structure API ✅
 
-**Objectif :** Mettre en place le squelette FastAPI avec le pattern lifespan.
-
 **Tâches :**
 - [x] `api/main.py` : `@asynccontextmanager lifespan` — charge config, instancie simulator + publisher + ws_manager, lance la boucle en background task
 - [x] CORS configuré (origines : `http://localhost:8501` pour Streamlit)
@@ -197,8 +195,6 @@ Phase 8 : Extensions (facultatif)
 
 ### Étape 4.2 — Endpoints de commande ✅
 
-**Objectif :** Implémenter tous les endpoints REST de commande.
-
 **Tâches :**
 - [x] `api/routes/machines.py` : `GET /{id}`, `POST /{id}/power`, `PUT /{id}/fan_speed`, `PUT /{id}/fan_mode`
 - [x] `api/routes/cluster.py` : `GET /status`, `GET /energy`, `POST /power`, `PUT /fan_speed`
@@ -211,8 +207,6 @@ Phase 8 : Extensions (facultatif)
 
 ### Étape 4.3 — WebSocket /ws/cluster ✅
 
-**Objectif :** Implémenter le push temps réel du snapshot cluster.
-
 **Tâches :**
 - [x] `api/ws.py` : `ConnectionManager` + endpoint `/ws/cluster`
 - [x] `ClusterSimulator.run()` appelle `ws_manager.broadcast(snapshot)` à `events_per_sec` Hz
@@ -224,8 +218,6 @@ Phase 8 : Extensions (facultatif)
 
 ### Étape 4.4 — Endpoints simulation ✅
 
-**Objectif :** Permettre le contrôle du simulateur depuis l'API.
-
 **Tâches :**
 - [x] `api/routes/simulation.py` : `POST /simulation/fault`, `DELETE /simulation/fault/{id}`, `PUT /simulation/scenario`
 - [x] Hot-reload du `ScenarioEngine` sans redémarrage
@@ -234,50 +226,50 @@ Phase 8 : Extensions (facultatif)
 
 ---
 
-## Phase 5 — Dashboard Streamlit
+## Phase 5 — Dashboard Streamlit ✅
 
-### Étape 5.1 — Client WebSocket Streamlit
+### Étape 5.1 — Client WebSocket Streamlit ✅
 
 **Tâches :**
-- [ ] Implémenter `dashboard/ws_client.py`
-- [ ] Implémenter `dashboard/api_client.py` avec `httpx.AsyncClient`
-- [ ] `@st.cache_resource` pour instancier `ClusterWSClient` une seule fois
-- [ ] Reconnexion automatique si l'API redémarre
+- [x] Implémenter `dashboard/ws_client.py`
+- [x] Implémenter `dashboard/api_client.py` avec `httpx.AsyncClient`
+- [x] `@st.cache_resource` pour instancier `ClusterWSClient` une seule fois
+- [x] Reconnexion automatique si l'API redémarre
 
-**Critère d'acceptation :** `streamlit run dashboard/app.py` démarre sans erreur, snapshot non-vide en moins de 3s.
+**Critère d'acceptation :** `streamlit run dashboard/app.py` démarre sans erreur, snapshot non-vide en moins de 3s. ✅
 
 ---
 
-### Étape 5.2 — Vue Cluster (onglet 1)
+### Étape 5.2 — Vue Cluster (onglet 1) ✅
 
 **Tâches :**
-- [ ] 4 métriques : machines ON, T_max, W_total, coût €/h
-- [ ] Heatmap Plotly : une cellule par machine, couleur = `temp_cpu`
-- [ ] `st.fragment(run_every=1)` pour mise à jour automatique
+- [x] 4 métriques : machines ON, T_max, W_total, coût €/h
+- [x] Heatmap Plotly : une cellule par machine, couleur = `temp_cpu`
+- [x] Auto-refresh toutes les 2 s via `st.rerun()` (compatible Streamlit < 1.37)
 
-**Critère d'acceptation :** Heatmap se met à jour toutes les secondes.
+**Critère d'acceptation :** Heatmap se met à jour automatiquement. ✅
 
 ---
 
-### Étape 5.3 — Vue Machine + commandes (onglet 2)
+### Étape 5.3 — Vue Machine + commandes (onglet 2) ✅
 
 **Tâches :**
-- [ ] Sélecteur machine, métriques toutes sondes, état fans
-- [ ] Buffer circulaire (100 points) pour `st.line_chart` de `temperature_c`
-- [ ] Boutons : Power ON/OFF, Set Fan Speed, Fan Mode Auto/Manual
-- [ ] Afficher en rouge si `status: degraded` ou `faults` non vide
+- [x] Sélecteur machine, métriques toutes sondes, état fans
+- [x] Buffer circulaire (100 points) pour `st.line_chart` de `temperature_c`
+- [x] Boutons : Power ON/OFF, Set Fan Speed, Fan Mode Auto/Manual
+- [x] Afficher en rouge si `status: degraded` ou `faults` non vide
 
-**Critère d'acceptation :** `Power OFF` passe la machine en état `off` en moins de 2s.
+**Critère d'acceptation :** `Power OFF` passe la machine en état `off` en moins de 2s. ✅
 
 ---
 
-### Étape 5.4 — Vues Simulation et Énergie (onglets 3 et 4)
+### Étape 5.4 — Vues Simulation et Énergie (onglets 3 et 4) ✅
 
 **Tâches :**
-- [ ] Onglet 3 : sélecteur scénario, formulaire injection panne, journal 20 événements
-- [ ] Onglet 4 : kWh cumulés, €/h, PUE, bar chart par machine, projection mensuelle
+- [x] Onglet 3 : sélecteur scénario, formulaire injection panne, journal 20 événements
+- [x] Onglet 4 : kWh cumulés, €/h, PUE, bar chart par machine, projection mensuelle
 
-**Critère d'acceptation :** Injection de panne depuis le dashboard visible dans le journal en moins de 2s.
+**Critère d'acceptation :** Injection de panne depuis le dashboard visible dans le journal en moins de 2s. ✅
 
 ---
 
@@ -369,7 +361,7 @@ Phase 8 : Extensions (facultatif)
 ## Checklist de démarrage pour un développeur
 
 1. **Lire** `documents/specifications.md` en entier (~30 min)
-2. **Cloner** le dépôt et créer une branche `feature/phase-5-dashboard`
+2. **Cloner** le dépôt et créer une branche `feature/phase-6-docker`
 3. **Lancer** `MQTT_ENABLED=0 uvicorn api.main:app --reload` pour avoir l'API disponible
 4. **Valider** chaque étape avec ses tests avant de passer à la suivante
 5. **Utiliser** `docker compose up mosquitto` pour le broker MQTT
