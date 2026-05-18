@@ -70,35 +70,35 @@ class ScenarioEngine:
     @staticmethod
     def _ramp_with_spikes(
         t: float,
-        ramp_start_s: float,
-        ramp_end_s: float,
-        ramp_duration_s: float,
-        base_load: float = 0.1,
-        max_load: float = 1.0,
-        spike_rate_hz: float = 0.1,
-        spike_magnitude: float = 0.2,
+        ramp_start: float = 0.20,
+        ramp_end: float = 0.95,
+        ramp_duration_s: float = 600.0,
+        spike_probability: float = 0.02,
+        spike_duration_s: float = 30.0,
+        spike_magnitude: float = 0.30,
+        # alias legacy (anciens noms internes — ignorés silencieusement)
+        ramp_start_s: float | None = None,
+        ramp_end_s: float | None = None,
+        spike_rate_hz: float | None = None,
+        base_load: float | None = None,
+        max_load: float | None = None,
     ) -> float:
-        """Profil de charge : rampe + spikes stochastiques.
+        """Profil de charge : rampe linéaire de `ramp_start` à `ramp_end`
+        sur `ramp_duration_s` secondes, avec des spikes stochastiques.
 
-        La charge augmente linéairement puis reste à max_load. Des spikes
-        sont ajoutés de manière aléatoire (processus de Poisson discret).
+        Noms des paramètres alignés sur ``config/scenarios/stress.yaml``.
         """
-
+        # Rampe linéaire
         if ramp_duration_s <= 0:
-            load = max_load
-        elif t < ramp_start_s:
-            load = base_load
-        elif t > ramp_start_s + ramp_duration_s:
-            load = max_load
+            load = ramp_end
+        elif t >= ramp_duration_s:
+            load = ramp_end
         else:
-            # Rampe linéaire
-            alpha = (t - ramp_start_s) / ramp_duration_s
-            load = base_load + alpha * (max_load - base_load)
+            alpha = t / ramp_duration_s
+            load = ramp_start + alpha * (ramp_end - ramp_start)
 
-        # Spikes aléatoires
-        dt = 1.0  # le moteur de scénarios est appelé à ~1 Hz au minimum
-        lambda_ = spike_rate_hz * dt
-        if lambda_ > 0 and np.random.poisson(lambda_) > 0:
+        # Spikes de Poisson discrets (à chaque appel ≈ events_per_sec)
+        if spike_probability > 0 and np.random.random() < spike_probability:
             load += spike_magnitude
 
         return float(max(0.0, min(1.0, load)))
@@ -144,7 +144,7 @@ class FaultScheduler:
         self._elapsed_by_machine: dict[str, float] = {}
 
     def tick(self, machines: dict[str, MachineSimulator], dt: float) -> None:
-        """Évalue les déclenchements potentiels de pannes.
+        """Evalue les déclenchements potentiels de pannes.
 
         Pour chaque machine et chaque configuration de panne, tire
         un événement et, le cas échéant, appelle `inject_fault()`.
@@ -185,4 +185,3 @@ class FaultScheduler:
                         duration_s=self._recovery_delay_s,
                         magnitude=cfg.magnitude,
                     )
-
