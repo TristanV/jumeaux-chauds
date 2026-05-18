@@ -13,7 +13,7 @@
 | 1 — Fondations (config, modèle physique) | ✅ Complète |
 | 2 — Simulation (MachineSimulator, ClusterSimulator) | ✅ Complète |
 | 3 — MQTT (publisher aiomqtt, intégration cluster) | ✅ Complète |
-| 4 — API FastAPI (lifespan, endpoints, WebSocket) | 🔜 À venir |
+| 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
 | 5 — Dashboard Streamlit | 🔜 À venir |
 | 6 — Déploiement Docker | 🔜 À venir |
 | 7 — Tests d'intégration | 🔜 À venir |
@@ -31,7 +31,7 @@ conda activate jumeaux-chauds
 pip install -r requirements.txt
 ```
 
-### Lancer la simulation (standalone, sans MQTT)
+### Lancer la simulation seule (sans MQTT ni API)
 
 ```bash
 python scripts/run_simulator.py --scenario nominal
@@ -46,6 +46,22 @@ mosquitto_sub -h localhost -t 'dt/#' -v &
 python scripts/run_simulator.py --scenario nominal
 ```
 
+### Lancer l’API FastAPI
+
+```bash
+# Sans MQTT
+set MQTT_ENABLED=0  # Windows
+export MQTT_ENABLED=0  # Linux/macOS
+uvicorn api.main:app --reload --port 8000
+
+# Avec MQTT (broker requis)
+docker compose up mosquitto -d
+uvicorn api.main:app --reload --port 8000
+```
+
+Docs interactives : **http://localhost:8000/docs**  
+WebSocket cluster : `wscat -c ws://localhost:8000/ws/cluster`
+
 ---
 
 ## Architecture
@@ -53,7 +69,7 @@ python scripts/run_simulator.py --scenario nominal
 ```
 simulation/      Modèle physique thermique, MachineSimulator, ClusterSimulator
 mqtt/            MqttPublisher aiomqtt (Phase 3 ✅)
-api/             FastAPI lifespan + endpoints REST + WebSocket (Phase 4)
+api/             FastAPI lifespan + endpoints REST + WebSocket (Phase 4 ✅)
 dashboard/       Streamlit temps réel (Phase 5)
 consumer/        MQTT → TimescaleDB (Phase 6, profil storage)
 config/          YAML hiérarchique OmegaConf (base + scénarios)
@@ -62,6 +78,26 @@ tests/           pytest + pytest-asyncio
 
 Voir [`documents/specifications.md`](documents/specifications.md) pour le détail technique complet  
 et [`documents/roadmap.md`](documents/roadmap.md) pour le suivi d'avancement.
+
+---
+
+## API FastAPI (Phase 4 ✅)
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Info API + état simulateur |
+| `GET` | `/cluster/status` | Snapshot complet du cluster |
+| `GET` | `/cluster/energy` | Métriques énergétiques |
+| `POST` | `/cluster/power` | Allumer/éteindre tout le cluster |
+| `PUT` | `/cluster/fan_speed` | Vitesse homogène tous les fans |
+| `GET` | `/machines/{id}` | Snapshot d'une machine |
+| `POST` | `/machines/{id}/power` | Power ON/OFF (409 si T trop haute) |
+| `PUT` | `/machines/{id}/fan_speed` | Vitesse manuelle d'un fan |
+| `PUT` | `/machines/{id}/fan_mode` | Mode auto/manual d'un fan |
+| `POST` | `/simulation/fault` | Injecter une panne |
+| `DELETE` | `/simulation/fault/{id}` | Annuler les pannes d'une machine |
+| `PUT` | `/simulation/scenario` | Changer de scénario à chaud |
+| `WS` | `/ws/cluster` | Flux temps réel du snapshot |
 
 ---
 
@@ -99,7 +135,15 @@ jumeaux-chauds/
 │   └── duration.py
 ├── mqtt/
 │   └── publisher.py          ← Phase 3 ✅
-├── api/                      ← Phase 4 (à venir)
+├── api/                      ← Phase 4 ✅
+│   ├── main.py               (lifespan, CORS, routers)
+│   ├── deps.py               (injection de dépendances)
+│   ├── models.py             (schémas Pydantic v2)
+│   ├── ws.py                 (ConnectionManager + /ws/cluster)
+│   └── routes/
+│       ├── machines.py
+│       ├── cluster.py
+│       └── simulation.py
 ├── dashboard/                ← Phase 5 (à venir)
 ├── consumer/                 ← Phase 6 (à venir)
 ├── tests/
@@ -114,3 +158,7 @@ jumeaux-chauds/
 ├── requirements.consumer.txt
 └── requirements.test.txt
 ```
+
+---
+
+*Tristan Vanrullen — La Plateforme, Marseille — 2026*
