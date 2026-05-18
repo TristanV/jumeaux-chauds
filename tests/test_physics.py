@@ -1,6 +1,8 @@
 """Tests du modèle physique thermique et des fonctions de bruit."""
 from __future__ import annotations
 
+# ruff: noqa: I001
+
 import numpy as np
 import pytest
 
@@ -148,7 +150,7 @@ class TestComputeThermalStep:
     def test_dt_zero_no_change(self):
         T = 50.0
         q_in = 500.0
-        tau = compute_tau(TAU_MAX, 0.0, K_COOL)
+        tau = compute_tau(TAU_MAX, 0.0, k_cool=K_COOL)
         T_new = compute_thermal_step(T, q_in, tau, C_TH, T_AMB, dt=0.0)
         assert T_new == pytest.approx(T)
 
