@@ -1,1 +1,1 @@
-"""Package dashboard — application Streamlit."""
+"""Dashboard Streamlit — Phase 5."""
