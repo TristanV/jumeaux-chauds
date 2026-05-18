@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from omegaconf import OmegaConf
 
 from config.loader import get_machine_config, load_config
 from simulation.duration import parse_duration
