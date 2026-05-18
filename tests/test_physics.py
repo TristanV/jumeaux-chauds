@@ -89,15 +89,41 @@ class TestComputeTau:
 
 class TestComputeThermalStep:
     def test_temperature_increases_under_load_no_fans(self):
-        """Sans fans et sous forte charge, la température doit monter."""
+        """Sans fans et sous forte charge, la température doit monter strictement.
+
+        Avec C_th=800 J/°C et tau=90s, la montée est lente :
+        on vérifie seulement que T augmente bien au-dessus de T_amb,
+        pas un seuil absolu arbitraire.
+        500 ticks à 0.1s = 50s simulées → montée visible (~8°C).
+        """
         T = T_AMB
         q_in = compute_heat_input(
             compute_load_power(0.8, IDLE_W, MAX_W, ALPHA), HEAT_RATIO
         )
         tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, k_cool=K_COOL)
-        for _ in range(100):
+        for _ in range(500):
             T = compute_thermal_step(T, q_in, tau, C_TH, T_AMB, DT)
-        assert T > 40.0, f"Température trop basse : {T:.1f}°C"
+        assert T > T_AMB + 5.0, (
+            f"Température trop proche de l'ambiante après 50s sous charge : {T:.1f}°C"
+        )
+
+    def test_temperature_higher_with_more_load(self):
+        """Charge plus élevée → température plus haute après même durée."""
+        tau = compute_tau(TAU_MAX, fan_rpm_mean=0.0, k_cool=K_COOL)
+
+        T_low = T_AMB
+        q_low = compute_heat_input(compute_load_power(0.3, IDLE_W, MAX_W, ALPHA), HEAT_RATIO)
+        for _ in range(500):
+            T_low = compute_thermal_step(T_low, q_low, tau, C_TH, T_AMB, DT)
+
+        T_high = T_AMB
+        q_high = compute_heat_input(compute_load_power(0.9, IDLE_W, MAX_W, ALPHA), HEAT_RATIO)
+        for _ in range(500):
+            T_high = compute_thermal_step(T_high, q_high, tau, C_TH, T_AMB, DT)
+
+        assert T_high > T_low, (
+            f"Charge forte ({T_high:.1f}°C) devrait être > charge faible ({T_low:.1f}°C)"
+        )
 
     def test_temperature_stabilizes_with_fans(self):
         """Avec des fans rapides, la température doit se stabiliser."""
@@ -230,11 +256,6 @@ class TestWeibullEvent:
 
     def test_high_elapsed_high_probability(self):
         """Avec β>1 et t >> η, la probabilité doit être élevée sur dt grand."""
-        # t=10×scale, dt=100s → très haute probabilité
-        result = weibull_event(shape=2.0, scale_s=100.0, elapsed_s=1000.0, dt=100.0)
-        # On ne peut pas garantir True sur un seul tirage,
-        # mais la probabilité doit être ~1
-        # On le vérifie statistiquement
         count = sum(
             weibull_event(2.0, 100.0, 1000.0, 100.0)
             for _ in range(20)
