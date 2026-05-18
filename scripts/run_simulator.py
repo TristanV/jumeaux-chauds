@@ -90,9 +90,20 @@ async def main() -> None:
     logging.getLogger().setLevel(getattr(logging, args.log_level))
 
     # Charger la configuration
+    # load_config(scenario, overrides, config_dir) -> DictConfig
+    # Le cluster_id et events_per_sec sont passes via overrides dans le dict de config
     logger.info("Chargement de la configuration: scenario=%s, cluster=%s", args.scenario, args.cluster)
     try:
-        cfg = load_config(scenario=args.scenario, cluster_id=args.cluster)
+        cfg = load_config(
+            scenario=args.scenario,
+            overrides={
+                "cluster": {
+                    "id": args.cluster,
+                    "mqtt_enabled": not args.no_mqtt,
+                    "events_per_sec": args.events_per_sec,
+                }
+            },
+        )
     except FileNotFoundError as e:
         logger.error("Fichier de configuration introuvable: %s", e)
         sys.exit(1)
@@ -101,45 +112,52 @@ async def main() -> None:
         sys.exit(1)
 
     # Parser la duree
+    # parse_duration retourne 0.0 pour infini, sinon le nombre de secondes
     duration_s = parse_duration(args.duration)
-    if duration_s is None:
+    if duration_s == 0.0:
         logger.info("Duree: infinie (Ctrl+C pour arreter)")
     else:
         logger.info("Duree: %.0f secondes (%.1f minutes)", duration_s, duration_s / 60)
 
-    logger.info("Events par seconde: %.1f | MQTT: %s", args.events_per_sec, "desactive" if args.no_mqtt else "active")
-
-    # Creer le simulateur
-    simulator = ClusterSimulator(
-        cfg=cfg,
-        cluster_id=args.cluster,
-        events_per_sec=args.events_per_sec,
-        mqtt_enabled=not args.no_mqtt,
+    logger.info(
+        "Events par seconde: %.1f | MQTT: %s",
+        args.events_per_sec,
+        "desactive" if args.no_mqtt else "active",
     )
 
-    # Gestion du signal SIGINT (Ctrl+C)
+    # Creer le simulateur
+    # ClusterSimulator(config: dict) - un seul parametre
+    # cluster_id, tick_rate_hz etc. sont lus depuis cfg["cluster"] et cfg["simulation"]
+    simulator = ClusterSimulator(config=cfg)
+
+    # Gestion du signal SIGINT (Ctrl+C) et SIGTERM
     loop = asyncio.get_event_loop()
     stop_event = asyncio.Event()
 
     def _signal_handler() -> None:
         logger.info("Signal d arret recu, arret propre en cours...")
+        simulator.stop()  # ClusterSimulator.stop() met _running = False
         stop_event.set()
 
     loop.add_signal_handler(signal.SIGINT, _signal_handler)
     loop.add_signal_handler(signal.SIGTERM, _signal_handler)
 
     # Lancer la simulation
-    logger.info("Demarrage du simulateur pour le cluster '%s'...", args.cluster)
+    # ClusterSimulator.run() n a pas de parametre - arret via simulator.stop()
+    logger.info("Demarrage du simulateur pour le cluster '%s'...", simulator.cluster_id)
     try:
-        if duration_s is not None:
+        if duration_s > 0.0:
+            # Duree limitee: timeout via asyncio.wait_for
             await asyncio.wait_for(
-                simulator.run(stop_event=stop_event),
+                simulator.run(),
                 timeout=duration_s,
             )
         else:
-            await simulator.run(stop_event=stop_event)
+            # Duree infinie: tourne jusqu au Ctrl+C
+            await simulator.run()
     except asyncio.TimeoutError:
         logger.info("Duree de simulation atteinte, arret propre.")
+        simulator.stop()
     except asyncio.CancelledError:
         logger.info("Simulation annulee.")
     finally:
@@ -147,8 +165,8 @@ async def main() -> None:
         logger.info(
             "Simulation terminee | Machines: %d | Energie totale: %.3f kWh | Cout: %.4f EUR",
             len(snapshot.get("machines", {})),
-            snapshot.get("metrics", {}).get("total_energy_kwh", 0.0),
-            snapshot.get("metrics", {}).get("total_cost_eur", 0.0),
+            snapshot.get("metrics", {}).get("energy_kwh_total", 0.0),
+            snapshot.get("metrics", {}).get("cost_eur_total", 0.0),
         )
 
 
