@@ -1,1 +1,1 @@
-"""Package api — FastAPI + WebSocket."""
+"""Package FastAPI — Jumeaux Chauds."""
