@@ -78,13 +78,23 @@ class MqttConsumer:
         elif kind == "status":
             await self._insert_event(cluster_id, machine_id, "status_change", data)
 
+    def _convert_ts(self, ts_str: str) -> datetime:
+        ts = ts_str
+        if ts:
+            if ts.endswith("Z"):
+                ts = ts[:-1] + "+00:00"
+            ts = datetime.fromisoformat(ts)
+        else:
+            ts = datetime.now(timezone.utc).isoformat()
+        return ts
+    
     async def _insert_telemetry(
         self,
         cluster_id: str,
         machine_id: str,
         data: dict,
     ) -> None:
-        ts = data.get("ts") or datetime.now(timezone.utc).isoformat()
+        ts = self._convert_ts(data.get("ts"))
 
         # Température principale : premier capteur trouvé
         sensors = data.get("sensors", {})
@@ -127,7 +137,7 @@ class MqttConsumer:
         event_type: str,
         data: dict,
     ) -> None:
-        ts = data.get("ts") or datetime.now(timezone.utc).isoformat()
+        ts = self._convert_ts(data.get("ts"))
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
