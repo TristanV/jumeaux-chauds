@@ -97,8 +97,8 @@ class MqttConsumer:
         ts = self._convert_ts(data.get("ts"))
 
         # Température principale : premier capteur trouvé
-        sensors = data.get("sensors", {})
-        temp_c = next(iter(sensors.values()), {}).get("temperature_c") if sensors else data.get("temperature_c")
+        sensors = data.get("sensors", [])
+        temp_c = sensors[0].get("temp_c") if sensors else data.get("temperature_c")
 
         # Vitesse moyenne des fans
         fans = data.get("fans", [])
