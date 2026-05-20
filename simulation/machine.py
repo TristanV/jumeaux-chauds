@@ -107,6 +107,7 @@ class MachineSimulator:
 
         self.status: MachineStatus = "off"
         self.temperature_c: float = thermal.ambient_temp_c
+        self.power_w: float = 0.0
         self.energy_kwh_cumulated: float = 0.0
         self._time_since_overheat_s: float = 0.0
 
@@ -251,6 +252,7 @@ class MachineSimulator:
             max_w=self.thermal.max_w,
             alpha=self.thermal.alpha,
         )
+        self.power_w = power_w
 
         # Application de pannes de type power_surge (surconsommation)
         for fault in self.faults:
@@ -325,7 +327,8 @@ class MachineSimulator:
             "id": self.id,
             "role": self.role,
             "status": self.status,
-            "temperature_c": self.temperature_c,
+            "temperature_c": self.temperature_c,            
+            "power_w": self.power_w,
             "energy_kwh_cumulated": self.energy_kwh_cumulated,
             "fans": fans_payload,
             "sensors": sensors_payload,
