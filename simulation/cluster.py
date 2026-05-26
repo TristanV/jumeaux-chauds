@@ -286,7 +286,7 @@ class ClusterSimulator:
                     )
 
                 # Panne active ?
-                for fault in snap.get("active_faults", []):
+                for fault in snap.get("faults", []):
                     fault_key = f"{mid}:{fault.get('type')}:{fault.get('ts_start')}"
                     if not hasattr(self, "_published_faults"):
                         self._published_faults: set[str] = set()
