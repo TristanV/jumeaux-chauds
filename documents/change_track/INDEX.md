@@ -21,6 +21,12 @@
 | **PHASE_7_4_COMPLETION.md** | Tests MQTT e2e : 18 tests, 8 topics, publisher config, payload structure, integration | ✅ Phase 7.4 |
 | **PHASE_7_5_COMPLETION.md** | Tests TimescaleDB consumer : 28 tests, topic parsing, payload validation, data transformation, dispatch | ✅ Phase 7.5 |
 
+### Phase 8 — Extensions pédagogiques
+
+| Fichier | Contenu | Statut |
+|---------|---------|--------|
+| **PHASE_8_1_COMPLETION.md** | Scénarios avancés (heatwave, busy_weeks) et observateur MQTT | ✅ Phase 8.1 |
+
 ---
 
 ## 🔍 Structure des documents
@@ -107,7 +113,8 @@ Phase 7.2 : Corrections modèle physique (RPM³, tau, noise) ✅
 Phase 7.3 : Tests API FastAPI (23 tests, 10 endpoints) ✅
 Phase 7.4 : Tests MQTT e2e (18 tests, 8 topics) ✅
 Phase 7.5 : Tests TimescaleDB consumer (28 tests, pipeline complet) ✅
-Phase 8   : Extensions pédagogiques 🔜
+Phase 8.1 : Scénarios avancés (heatwave, busy_weeks) + MQTT observer ✅
+Phase 8.2+ : Extensions optionnelles (PID, coût, ML) 🔜
 ```
 
 ---

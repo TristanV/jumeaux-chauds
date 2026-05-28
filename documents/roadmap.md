@@ -47,7 +47,7 @@ Phase 7 : Tests
   ├── Étape 7.1 : Couverture et tests unitaires consolidés
   └── Étape 7.2 : Tests d'intégration
 
-Phase 8 : Extensions (facultatif)
+Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 ```
 
 ### Statut global
@@ -58,7 +58,7 @@ Phase 8 : Extensions (facultatif)
 - [x] Phase 4 — API FastAPI
 - [x] Phase 5 — Dashboard Streamlit
 - [x] Phase 6 — Déploiement Docker
-- [ ] Phase 7 — Tests (intégration et compléments)
+- [x] Phase 7 — Tests (unitaires + intégration)
 - [ ] Phase 8 — Extensions pédagogiques
 
 ---
@@ -471,23 +471,137 @@ pytest tests/test_phase_7_2_corrections.py -v
 
 ---
 
-## Phase 8 — Extensions pédagogiques (facultatif)
+## Phase 8 — Extensions pédagogiques
 
-### Extensions ⭐
-- [ ] **Scénario heatwave** : `config/scenarios/heatwave.yaml` avec `ambient_temp_c: 32.0`
-- [ ] **Observer MQTT** : abonner MQTT Explorer ou Node-RED
+### Étape 8.1 — Scénarios avancés + MQTT Observer ⭐ ✅
 
-### Extensions ⭐⭐
-- [ ] **Régulateur PID** : P, I, D configurables en YAML
+**Objectif :** Implémenter deux scénarios réalistes (heatwave, busy_weeks) et un observateur MQTT pour monitoring.
+
+**Tâches :**
+- [x] Créer `config/scenarios/heatwave.yaml`
+  - Température ambiante progressive (28°C → 35°C en 24h)
+  - Oscillations jour/nuit ±5°C
+  - Pics de charge rush hours (9-12h, 14-17h)
+  - Pannes accélérées quand T > 32°C (3× taux de base)
+  
+- [x] Créer `config/scenarios/busy_weeks.yaml`
+  - Cycles semaine (lundi-vendredi vs samedi-dimanche)
+  - Heures creuses (00-07h, 20-23h) : 10-15% charge
+  - Rush hours (9-12h, 14-18h) : 75-80% charge
+  - Anomalies hebdomadales (lundi spike +20%, vendredi drop -30%)
+  
+- [x] Créer `scripts/mqtt_observer.py`
+  - Observer MQTT léger en Python (alternative MQTT Explorer)
+  - Affichage JSON pretty-printed avec timestamps
+  - Filtrage par topic avec `--topics` multi
+  - Verbeux optionnel (taille payloads)
+
+**Exécution :**
+```bash
+# Observer tous les topics simulateur
+python scripts/mqtt_observer.py --host localhost --port 1883
+
+# Observer topics spécifiques
+python scripts/mqtt_observer.py --host localhost \
+  --topics "dt/+/+/telemetry" "dt/+/summary" "dt/+/+/fault"
+
+# Verbose (affiche tailles payloads)
+python scripts/mqtt_observer.py -v
+```
+
+**Cas d'usage :**
+- Heatwave : tester limites refroidissement, dimensionner climatisation
+- Busy weeks : valider auto-scaling, analyser coûts énergétiques hebdo
+- Observer MQTT : déboguer topics, inspecter payloads en temps réel
+
+**Critère d'acceptation :**
+- ✅ Deux fichiers YAML chargent sans erreur
+- ✅ Scenarii génèrent charge cohérente sur 24h (heatwave) et 7j (busy_weeks)
+- ✅ Observer MQTT se connecte, affiche messages JSON formatés
+
+---
+
+### Étape 8.2 — Régulateur PID configurable ⭐⭐ (À faire)
+
+**Objectif :** Remplacer le régulateur proportionnel simple par un PID (Proportionnel-Intégral-Dérivé) configurable en YAML.
+
+**Tâches :**
+- [ ] Implémenter classe `PIDController` dans `simulation/pid.py`
+  - Calcul erreur = T_cible - T_actuelle
+  - Terme P : correction proportionnelle
+  - Terme I : intégration d'erreur (steady-state)
+  - Terme D : damping (réaction rapide)
+  - Anti-windup pour terme I
+
+- [ ] Ajouter paramètres PID en YAML :
+  ```yaml
+  fan_controller:
+    type: "pid"
+    setpoint_c: 45.0
+    kp: 5.0      # Proportional gain
+    ki: 0.1      # Integral gain
+    kd: 2.0      # Derivative gain
+    output_min_rpm: 0
+    output_max_rpm: 4000
+  ```
+
+- [ ] Intégrer dans `MachineSimulator._update_fan_speed()`
+  - Remplacer logique proportionnelle simple
+  - Exécuter PID à chaque tick
+
+- [ ] Tests `test_pid_controller.py` (15+ tests)
+  - Stabilisation autour setpoint
+  - Réaction aux changements de charge
+  - Saturation (min/max RPM)
+
+**Cas d'usage :** Contrôle thermique plus stable, moins d'oscillations.
+
+---
+
+### Étape 8.3 — Coût électrique mensuel ⭐⭐ (À faire)
+
+**Objectif :** Calculer facture d'électricité réaliste avec PUE variable.
+
+**Tâches :**
+- [ ] Implémenter calcul coût dans `simulation/energy.py`
+  - Énergie totale (kWh) = ∫ P_serveurs dt
+  - Énergie avec PUE = énergie_totale × PUE_effective
+  - Coût = énergie_avec_pue × tarif_kwh
+  - Projection mensuelle (30j), trimestrielle (90j), annuelle (365j)
+
+- [ ] Ajouter endpoint API :
+  ```
+  GET /cluster/energy/projection?period=month
+  → {
+    "energy_kwh_current": 125.5,
+    "pue_effective": 1.85,
+    "cost_current_eur": 32.15,
+    "projection": {
+      "month_eur": 1095.50,
+      "quarter_eur": 3286.50,
+      "year_eur": 13146.00
+    }
+  }
+  ```
+
+- [ ] Dashboard : ajouter onglet "Energy Cost"
+  - Graphe énergie (kWh) par jour
+  - PUE moyen sur période
+  - Coût cumulé avec tendance
+  - Export CSV (date, kWh, PUE, €)
+
+**Cas d'usage :** Justifier budget infrastructure, analyser ROI refroidissement.
+
+---
+
+### Extensions ⭐⭐⭐ (Nice-to-have, Post-Phase-8)
+
 - [ ] **Candlestick OHLC** : buffer 60s sur `temperature_c`, graphe Plotly
-- [ ] **Coût électrique** : projection mensuelle, export CSV
-- [ ] **Stack Grafana** : profil `storage` complet
-
-### Extensions ⭐⭐⭐
+- [ ] **Stack Grafana** : datasource TimescaleDB, dashboard avancé
 - [ ] **Détection d'anomalie ML** : IsolationForest / PyOD sur séries MQTT
-- [ ] **Classification drift / surchauffe**
-- [ ] **Estimation Weibull (MLE)**
-- [ ] **Agent RL** : DQN (Stable-Baselines3)
+- [ ] **Classification drift / surchauffe** : modèle supervisé
+- [ ] **Estimation Weibull (MLE)** : paramètres de distribution pannes
+- [ ] **Agent RL** : DQN (Stable-Baselines3) pour optimisation fans
 - [ ] **Command consumer MQTT** : subscriber `cmd/#`
 - [ ] **Outil MCP** : endpoints comme outils MCP pour agent LLM
 

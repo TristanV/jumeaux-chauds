@@ -865,14 +865,215 @@ def test_temperature_stabilizes_with_fans():
 
 ---
 
-## 14. Extensions pédagogiques
+## 14. Extensions pédagogiques — Phase 8
 
-### 14.1 Tableau des extensions par niveau
+### 14.1 Scénario Heatwave (Vague de chaleur)
+
+**Objectif :** Simuler une vague de chaleur avec saisonnalité progressive — température ambiante fluctuante, phases de hausse/baisse, paramétrable en durée et amplitude.
+
+**Localisation :** `config/scenarios/heatwave.yaml`
+
+**Paramètres :**
+```yaml
+heatwave:
+  # Base
+  base_load_profile: "sine_wave"
+  base_amplitude: 0.3
+  base_offset: 0.4
+  
+  # Saisonnalité température ambiante
+  ambient:
+    base_temp_c: 28.0                    # T_amb de base (vague de chaleur)
+    seasonal_amplitude_c: 5.0             # Amplitude des fluctuations
+    seasonal_period_s: 14400.0            # Période jour/nuit (4h) ou semaine (14400s = 4h)
+    drift_enabled: true                   # Hausse progressive T_amb
+    drift_rate_c_per_hour: 0.5            # Hausse °C/heure (ex: +0.5°C/h = +12°C/24h)
+    drift_max_c: 35.0                     # Plafond T_amb
+    
+  # Pics de charge (rush hour)
+  load:
+    base_profile: "sine_wave"
+    rush_hour_enabled: true
+    rush_hours:
+      - start_hour: 9
+        end_hour: 12
+        load_multiplier: 1.5              # +50% charge 9h-12h
+      - start_hour: 14
+        end_hour: 17
+        load_multiplier: 1.3
+    
+  # Pannes accélérées en conditions de chaleur
+  faults:
+    base_rate: 0.001                      # Base fault rate
+    temp_sensitivity: true                # Pannes plus fréquentes si T > seuil
+    temp_threshold_c: 32.0
+    rate_multiplier_hot: 3.0              # 3× plus de pannes quand T > 32°C
+    duration_distribution: "exponential"
+    mean_duration_s: 1800.0               # 30 min en moyenne
+```
+
+**Comportement :**
+1. **Température ambiante progressive** : T_amb débute à 28°C, augmente de 0.5°C/h jusqu'à 35°C (24h de simulation)
+2. **Oscillations jour/nuit** : ±5°C autour de la tendance moyenne (période 4h)
+3. **Pics de charge** : heures de bureau (9-12h, 14-17h) → machines surexploitées
+4. **Pannes cascadantes** : au-delà de 32°C, taux de panne × 3 (vieillissement accéléré sous stress thermique)
+5. **Refroidissement limité** : fans au max mais T_amb trop élevée → capacité de refroidissement réduite
+
+**Cas d'usage pédagogique :**
+- Observer dégradation progressive des performances sous stress thermique
+- Analyser corrélation entre T_amb et taux de pannes
+- Tester limites du système de refroidissement
+- Dimensionner les ressources (UPS, climatisation) pour résilience
+
+---
+
+### 14.2 Scénario Busy Weeks (Semaines chargées)
+
+**Objectif :** Simuler charge réseau réaliste avec weekend calme, rush hours, heures creuses — paramétrable pour modéliser cycles de travail.
+
+**Localisation :** `config/scenarios/busy_weeks.yaml`
+
+**Paramètres :**
+```yaml
+busy_weeks:
+  # Cycle semaine (en secondes)
+  week_cycle_s: 604800.0                  # 7 jours = 604800s
+  
+  # Simulation d'une journée standard (lundi-vendredi)
+  weekday:
+    # Heures creuses (00:00-07:00)
+    off_peak:
+      hours: [0, 1, 2, 3, 4, 5, 6, 7]
+      load_factor: 0.1                    # 10% charge (services background)
+      
+    # Montée progressive (07:00-09:00)
+    ramp_up:
+      hours: [7, 8, 9]
+      load_start: 0.1
+      load_end: 0.6
+      
+    # Rush hour matin (09:00-12:00)
+    morning_rush:
+      hours: [9, 10, 11, 12]
+      load_factor: 0.75                   # 75% charge
+      
+    # Pause midi (12:00-14:00)
+    midday_break:
+      hours: [12, 13, 14]
+      load_factor: 0.4
+      
+    # Rush hour après-midi (14:00-18:00)
+    afternoon_rush:
+      hours: [14, 15, 16, 17, 18]
+      load_factor: 0.8                    # 80% charge
+      
+    # Décroissance (18:00-20:00)
+    ramp_down:
+      hours: [18, 19, 20]
+      load_start: 0.8
+      load_end: 0.2
+      
+    # Nuit (20:00-23:59)
+    night:
+      hours: [20, 21, 22, 23]
+      load_factor: 0.15                   # 15% charge
+  
+  # Weekend (samedi, dimanche) : complètement calme
+  weekend:
+    load_factor: 0.05                     # 5% charge (maintenance minimal)
+    
+  # Anomalies hebdomadales
+  anomalies:
+    monday_spike: true                    # Pic de charge lundi 9h (rattrapage)
+    monday_spike_load: 0.95
+    friday_evening_drop: true             # Charge réduite vendredi après 16h
+    friday_evening_load: 0.3
+```
+
+**Comportement :**
+1. **Cycle 7 jours** : lundi-vendredi = journée normale, samedi-dimanche = repos
+2. **Heures creuses** : 00:00-07:00 & 20:00-23:59 → 10-15% charge
+3. **Rush hours** : 9-12h & 14-18h → 75-80% charge (appels simultanés, traitements batch)
+4. **Pause midi** : 12-14h → 40% charge (lunch break)
+5. **Weekend** : 5% charge (backup, monitoring seulement)
+6. **Anomalies hebdomadales** : lundi +20% charge, vendredi -30% charge après 16h
+
+**Cas d'usage pédagogique :**
+- Dimensionner infrastructure pour pics de charge réalistes
+- Analyser cycles d'utilisation énergétique
+- Optimiser scheduling de tâches (batch le weekend?)
+- Prédire hotspots thermiques par jour/heure
+- Valider auto-scaling policies
+
+---
+
+### 14.3 Observateur MQTT recommandé
+
+**Recommandation :** **MQTT Explorer** (desktop GUI, gratuit, cross-platform)
+
+**Alternative légère :** **mosquitto_sub** (CLI natif)
+
+#### Option 1 : MQTT Explorer (GUI — recommandée)
+
+**Site :** https://mqtt-explorer.com/
+
+**Avantages :**
+- Interface graphique intuitive (arborescence topics)
+- Affichage temps réel des payloads JSON avec coloration
+- Historique du dernier message par topic
+- Filtrage et recherche
+- Export CSV/JSON
+- Statistiques de publication
+
+**Installation :**
+- Windows/Mac : télécharger depuis mqtt-explorer.com
+- Linux : `snap install mqtt-explorer` ou binaire depuis GitHub
+
+**Configuration pour jumeaux-chauds :**
+```
+Broker: localhost
+Port: 1883
+Protocol: mqtt://
+Topic filter: dt/# (observer tous les topics simulateur)
+```
+
+**Cas d'usage :**
+- Visualiser payloads en temps réel
+- Déboguer topic naming
+- Vérifier QoS levels
+- Inspecter structure des messages MQTT
+
+#### Option 2 : mosquitto_sub (CLI légère)
+
+**Installation (déjà dans le conteneur) :**
+```bash
+docker exec mosquitto mosquitto_sub -h mosquitto -t "dt/#" -v
+```
+
+**Usage simple :**
+```bash
+# Tous les topics
+mosquitto_sub -h localhost -t "dt/#" -v
+
+# Topics spécifiques
+mosquitto_sub -h localhost -t "dt/cluster_alpha/+/telemetry" -v
+mosquitto_sub -h localhost -t "dt/cluster_alpha/+/fault" -v
+```
+
+**Avantages :**
+- Zéro dépendance externe
+- Script-able pour automation
+- Parfait pour logs/monitoring
+
+---
+
+### 14.4 Tableau des extensions Phase 8
 
 | Niveau | Domaine | Extension | Effort estimé |
 |---|---|---|---|
-| ⭐ | Config | Créer un scénario `heatwave.yaml` : T_amb +10°C, panne progressive | 2h |
-| ⭐ | MQTT | Abonner MQTT Explorer / Node-RED au broker | 1h |
+| ⭐ | Config | Scénario **heatwave.yaml** : T_amb progressive, rush hours thermique | 3h |
+| ⭐ | Config | Scénario **busy_weeks.yaml** : cycles jour/semaine, rush hours | 3h |
+| ⭐ | MQTT | Observer MQTT Explorer / mosquitto_sub | 1h |
 | ⭐ | API | Tester tous les endpoints depuis `/docs` (OpenAPI auto-générée) | 1h |
 | ⭐⭐ | Dashboard | Ajouter un graphe candlestick OHLC sur `temp_cpu` (fenêtres 60s) | 4h |
 | ⭐⭐ | Physique | Remplacer le régulateur proportionnel par un **PID** configurable | 6h |

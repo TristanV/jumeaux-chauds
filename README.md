@@ -16,8 +16,8 @@
 | 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
 | 5 — Dashboard Streamlit (temps réel, commandes, énergie) | ✅ Complète |
 | 6 — Déploiement Docker (Compose noyau + profil storage) | ✅ Complète |
-| 7 — Tests unitaires et d'intégration | ✅ **Complète** (7.1 ✅, 7.2 ✅, 7.3 ✅, 7.4 ✅, 7.5 ✅) |
-| 8 — Extensions pédagogiques | 🔜 Facultatif |
+| 7 — Tests unitaires et d'intégration | ✅ **Complète** (7.1-7.5 ✅, 224 tests) |
+| 8 — Extensions pédagogiques | 🔄 **En cours** (8.1 ✅) |
 
 ---
 
@@ -188,6 +188,62 @@ et [`documents/roadmap.md`](documents/roadmap.md) pour le suivi d'avancement.
 
 ---
 
+## Nouveaux scénarios Phase 8.1
+
+### Heatwave — Vague de chaleur
+
+Simule une augmentation progressive de la température ambiante avec oscillations et pannes accélérées.
+
+```bash
+python scripts/run_simulator.py --scenario heatwave --duration 24h
+```
+
+**Caractéristiques :**
+- T_amb augmente de 28°C à 35°C (drift +0.5°C/h)
+- Oscillations jour/nuit ±5°C (période 4h)
+- Rush hours (9-12h, 14-17h) → +50% charge
+- Pannes 3× plus fréquentes quand T > 32°C
+- **Cas d'usage :** Tester limites refroidissement, dimensionner climatisation
+
+### Busy Weeks — Semaines chargées
+
+Simule cycles réalistes jour/semaine avec rush hours et weekend calme.
+
+```bash
+python scripts/run_simulator.py --scenario busy_weeks --duration 7d
+```
+
+**Caractéristiques :**
+- Lundi-vendredi : heures creuses (00-07h, 20-23h) vs rush hours (9-12h, 14-18h)
+- Samedi-dimanche : charge minimale (5%)
+- Anomalies : lundi spike (+20%), vendredi drop (-30% après 16h)
+- **Cas d'usage :** Valider auto-scaling, analyser coûts énergétiques hebdomadaires
+
+### Observer MQTT
+
+Viewer MQTT léger pour monitoring en temps réel (alternative MQTT Explorer).
+
+```bash
+# Observer tous les topics simulateur
+python scripts/mqtt_observer.py --host localhost --port 1883
+
+# Observer topics spécifiques
+python scripts/mqtt_observer.py --topics "dt/+/+/telemetry" "dt/+/summary"
+
+# Mode verbeux (affiche tailles payloads)
+python scripts/mqtt_observer.py -v
+
+# Avec Docker
+docker exec iot-twin python scripts/mqtt_observer.py --host mosquitto
+```
+
+**Avantages :**
+- Affichage JSON pretty-print avec timestamps
+- Filtrage flexible par topic pattern
+- Pas de dépendance externe (utilise aiomqtt natif)
+
+---
+
 ## Topics MQTT publiés (Phase 3 ✅)
 
 | Topic | QoS | Fréquence |
@@ -266,7 +322,32 @@ jumeaux-chauds/
 
 ---
 
-## Phase 7 — Tests (actuellement en cours)
+## Phase 8 — Extensions pédagogiques (Phase 8.1 complétée ✅)
+
+### Étape 8.1 ✅ — Scénarios avancés + MQTT Observer
+
+**Scénarios créés :**
+- ✅ `config/scenarios/heatwave.yaml` — Vague de chaleur avec T_amb progressive (28→35°C), oscillations jour/nuit, pannes thermiques
+- ✅ `config/scenarios/busy_weeks.yaml` — Cycles semaine (weekday vs weekend), rush hours (9-12h, 14-18h), anomalies hebdomadales
+
+**Observer MQTT créé :**
+- ✅ `scripts/mqtt_observer.py` — Viewer MQTT léger en Python, JSON pretty-print, filtrage topics
+
+**Exécution :**
+```bash
+# Lancer avec scénario heatwave (24h de simulation)
+python scripts/run_simulator.py --scenario heatwave --duration 24h
+
+# Lancer avec scénario busy_weeks (7j de simulation)
+python scripts/run_simulator.py --scenario busy_weeks --duration 7d
+
+# Observer MQTT en temps réel
+python scripts/mqtt_observer.py --host localhost --topics "dt/#"
+```
+
+---
+
+## Phase 7 — Tests (complétée ✅)
 
 ### Étape 7.1 ✅ — Tests unitaires consolidés
 
