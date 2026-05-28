@@ -18,6 +18,8 @@
 | **DELIVERABLE_PHASE_7.md** | Livrable formel : avant/après, checklists, certification Phase 7.1 | ✅ Phase 7.1 |
 | **PHASE_7_2_COMPLETION.md** | Corrections du modèle physique : RPM³, tau(RPM), noise application, protocol_version suppression | ✅ Phase 7.2 |
 | **PHASE_7_3_COMPLETION.md** | Tests API FastAPI : 23 tests, 10 endpoints REST, WebSocket, format validation | ✅ Phase 7.3 |
+| **PHASE_7_4_COMPLETION.md** | Tests MQTT e2e : 18 tests, 8 topics, publisher config, payload structure, integration | ✅ Phase 7.4 |
+| **PHASE_7_5_COMPLETION.md** | Tests TimescaleDB consumer : 28 tests, topic parsing, payload validation, data transformation, dispatch | ✅ Phase 7.5 |
 
 ---
 
@@ -103,8 +105,8 @@ Phase 1-6 : Fondations + Simulation + MQTT + API + Dashboard + Docker
 Phase 7.1 : Tests unitaires consolidés (155 tests, 85% couverture) ✅
 Phase 7.2 : Corrections modèle physique (RPM³, tau, noise) ✅
 Phase 7.3 : Tests API FastAPI (23 tests, 10 endpoints) ✅
-Phase 7.4 : Tests MQTT e2e 📋
-Phase 7.5 : Tests TimescaleDB consumer 📋
+Phase 7.4 : Tests MQTT e2e (18 tests, 8 topics) ✅
+Phase 7.5 : Tests TimescaleDB consumer (28 tests, pipeline complet) ✅
 Phase 8   : Extensions pédagogiques 🔜
 ```
 

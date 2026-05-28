@@ -16,7 +16,7 @@
 | 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
 | 5 — Dashboard Streamlit (temps réel, commandes, énergie) | ✅ Complète |
 | 6 — Déploiement Docker (Compose noyau + profil storage) | ✅ Complète |
-| 7 — Tests unitaires et d'intégration | 🔄 **En cours** (Phase 7.1 ✅, Phase 7.2 ✅, Phase 7.3 ✅, 7.4-7.5 📋) |
+| 7 — Tests unitaires et d'intégration | ✅ **Complète** (7.1 ✅, 7.2 ✅, 7.3 ✅, 7.4 ✅, 7.5 ✅) |
 | 8 — Extensions pédagogiques | 🔜 Facultatif |
 
 ---
@@ -301,19 +301,38 @@ Exécution :
 pytest tests/test_api_integration.py -v
 ```
 
-### Étape 7.4 📋 — Tests MQTT e2e
+### Étape 7.4 ✅ — Tests MQTT e2e
 
-Objectifs :
-- [ ] Créer `tests/test_mqtt_integration.py`
-- [ ] Broker de test (testcontainers ou mosquitto)
-- [ ] Valider flux simulation → MQTT → subscriber
+Tests créés :
+- ✅ `tests/test_mqtt_integration.py` avec 18 tests
+- ✅ Tests de configuration du publisher (broker, topics, QoS)
+- ✅ Validation des 8 topics principaux
+- ✅ Structure et sérialisation JSON des payloads
+- ✅ Intégration simulation → publisher
 
-### Étape 7.4 📋 — Tests consumer TimescaleDB
+Exécution :
+```bash
+pytest tests/test_mqtt_integration.py -v
+```
 
-Objectifs :
-- [ ] Créer `tests/test_consumer_integration.py`
-- [ ] Valider MQTT → consumer → TimescaleDB
-- [ ] Vérifier schéma et ingestion
+### Étape 7.5 ✅ — Tests consumer TimescaleDB
+
+Tests créés :
+- ✅ `tests/test_consumer_integration.py` avec 28 tests
+- ✅ Validation MQTT topic parsing (regex, cluster/machine extraction)
+- ✅ Validation JSON payload parsing (telemetry, events)
+- ✅ Conversion timestamps ISO 8601 → DateTime
+- ✅ Calcul RPM moyen fans
+- ✅ Dispatch messages vers telemetry_insert ou event_insert
+- ✅ Extraction données (temp, power, energy, status)
+- ✅ Configuration consumer (MQTT broker, PostgreSQL DSN)
+
+Exécution :
+```bash
+pytest tests/test_consumer_integration.py -v
+```
+
+**Résultat :** 28/28 tests PASSED (100%) ✅
 
 ---
 
