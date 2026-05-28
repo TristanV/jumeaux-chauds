@@ -6,8 +6,31 @@
 
 ---
 
+## Vue d'ensemble : Flux de télémétrie
+
+Voir [`documents/TELEMETRY_FLOWS.md`](TELEMETRY_FLOWS.md) pour une visualisation complète des routes de données.
+
+**Routes possibles (en résumé) :**
+
+```
+┌─ Route 1 : MQTT Direct        (Real-time, <100ms, no persistence)
+│
+├─ Route 2 : API REST           (Query-based, ~50ms, stateful)
+│
+├─ Route 3 : MQTT→TimescaleDB   (Persistent, ~1s, historical)
+│
+├─ Route 4 : TimescaleDB→Grafana (Dashboards, ~500ms, pre-computed)
+│
+└─ Route 5 : Streamlit+WebSocket (Interactive, <500ms, UI-driven)
+```
+
+Les données fluent depuis la **simulation** (ClusterSimulator) vers les **clients externes** via une ou plusieurs de ces routes.
+
+---
+
 ## Table des matières
 
+0. **[Flux de télémétrie](TELEMETRY_FLOWS.md)** ← **LIRE D'ABORD** (routes de données)
 1. [Périmètre et noyau fonctionnel](#1-périmètre-et-noyau-fonctionnel)
 2. [Décisions techniques](#2-décisions-techniques)
 3. [Architecture globale](#3-architecture-globale)

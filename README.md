@@ -1,457 +1,219 @@
-# 🌡️ Jumeaux Chauds — Digital Twin de Cluster IoT
+# 🔥 Jumeaux Chauds — Digital Twin pour Clusters IoT
 
-> Simulateur de jumeaux numériques thermiques pour un cluster de serveurs, avec publication MQTT temps réel, API FastAPI, dashboard Streamlit et stack de stockage TimescaleDB + Grafana.
+**Plateforme pédagogique de simulation thermique pour serveurs en cluster avec télémétrie MQTT en temps réel.**
 
-**Auteur :** Tristan Vanrullen — La Plateforme, Marseille — 2026
-
----
-
-## Avancement
-
-| Phase | Statut |
-|---|---|
-| 1 — Fondations (config, modèle physique) | ✅ Complète |
-| 2 — Simulation (MachineSimulator, ClusterSimulator) | ✅ Complète |
-| 3 — MQTT (publisher aiomqtt, intégration cluster) | ✅ Complète |
-| 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
-| 5 — Dashboard Streamlit (temps réel, commandes, énergie) | ✅ Complète |
-| 6 — Déploiement Docker (Compose noyau + profil storage) | ✅ Complète |
-| 7 — Tests unitaires et d'intégration | ✅ **Complète** (7.1-7.5 ✅, 224 tests) |
-| 8 — Extensions pédagogiques | 🔄 **En cours** (8.1 ✅) |
+Un projet de Master 2 conçu pour enseigner l'IoT, les modèles thermiques, MQTT, les bases de données de séries temporelles, FastAPI, et les dashboards interactifs.
 
 ---
 
-## Démarrage rapide
+## 🎯 Vue d'ensemble
 
-### Prérequis
+**Jumeaux Chauds** simule un cluster de serveurs physiques avec :
+
+- 🌡️ **Modèle thermique réaliste** — Équations différentielles 1er ordre avec charge CPU, refroidissement par fans, bruit gaussien
+- 📡 **Télémétrie MQTT multi-canaux** — 5 routes de données distinctes (direct MQTT, API REST, TimescaleDB, Grafana, Streamlit)
+- ⚙️ **Scénarios de charge avancés** — nominal, stress, heatwave (vague de chaleur 24h), busy_weeks (cycles réalistes 7 jours)
+- 🎮 **Contrôle et observation** — FastAPI REST + WebSocket, MQTT observer en temps réel, injection de pannes
+- 📊 **Dashboards interactifs** — Streamlit pour monitoring temps réel, Grafana pour analytics historiques
+- 🧪 **Suite de tests complète** — 155+ tests unitaires (85% couverture), tests par couche d'architecture
+
+---
+
+## 📚 Documentation Complète
+
+Cette documentation est organisée en 6 sections. Choisissez votre point d'entrée :
+
+| Section | Lien | Pour qui ? | Temps |
+|---------|------|-----------|-------|
+| **Démarrage rapide** | [📖 QUICK_START.md](documents/QUICK_START.md) | Développeurs : installer & lancer en 5 min | 5 min |
+| **Spécifications techniques** | [📋 specifications.md](documents/specifications.md) | Architectes & devs : comprendre le design | 20 min |
+| **Architecture en couches** | [📋 ARCHITECTURE_LAYERS.md](documents/ARCHITECTURE_LAYERS.md) | Architectes & devs : comprendre l'architecture | 15 min |
+| **Flux de données** | [🔀 TELEMETRY_FLOWS.md](documents/TELEMETRY_FLOWS.md) | Devs intégration : 5 routes de télémétrie | 15 min |
+| **Guide de test** | [🧪 TESTING_GUIDE.md](documents/TESTING_GUIDE.md) | QA & devs : tester par couche d'architecture | 10 min |
+| **Résumé flux** | [📊 DATA_FLOWS_SUMMARY.md](documents/DATA_FLOWS_SUMMARY.md) | Tous : carte de référence imprimable | 2 min |
+| **Roadmap & Phases** | [🗺️ roadmap.md](documents/roadmap.md) | Chef de projet : suivi du développement | 10 min |
+
+---
+
+## 🚀 Démarrer en 5 minutes
 
 ```bash
-conda create -n jumeaux-chauds python=3.12
+# 1. Environnement
+conda create -n jumeaux-chauds python=3.12 -y
 conda activate jumeaux-chauds
 pip install -r requirements.txt
-```
 
-### Développement local (sans Docker)
+# 2. Tests unitaires (optionnel)
+pytest tests/ -v
 
-```bash
-# Broker MQTT seul
-docker compose up mosquitto -d
+# 3. Broker MQTT (Terminal 1)
+docker run -d --name mosquitto -p 1883:1883 eclipse-mosquitto:2
 
-# Simulation CLI
-python scripts/run_simulator.py --scenario nominal
-python scripts/run_simulator.py --scenario stress --duration 2m
+# 4. Simulation (Terminal 2)
+python scripts/run_simulator.py --scenario nominal --duration 1m
 
-# API FastAPI
-export MQTT_ENABLED=0   # Linux/macOS
-set MQTT_ENABLED=0      # Windows
-uvicorn api.main:app --reload --port 8000
+# 5. Observer MQTT (Terminal 3)
+python scripts/mqtt_observer.py --host localhost
 
-# Dashboard Streamlit
+# 6. API (Terminal 4, optionnel)
+export MQTT_ENABLED=0
+uvicorn api.main:app --port 8000
+# → Docs : http://localhost:8000/docs
+
+# 7. Dashboard (Terminal 5, optionnel)
 streamlit run dashboard/app.py
+# → http://localhost:8501
 ```
 
-Docs API : **http://localhost:8000/docs**  
-Dashboard : **http://localhost:8501**  
-WebSocket : `wscat -c ws://localhost:8000/ws/cluster`
+**→ Pour instructions détaillées, voir [QUICK_START.md](documents/QUICK_START.md)**
+
 
 ---
 
-## Docker Compose — Stack complète (Phase 6)
+## 🎓 Architecture en 8 Couches
 
-### Noyau (simulateur + broker + dashboard)
-
-```bash
-docker compose up -d
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Layer 8 : Dashboards (Streamlit, Grafana)                      │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 7 : API Gateway (FastAPI REST + WebSocket)               │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 6 : Simulation Core (ClusterSimulator, ScenarioEngine)    │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 5 : MQTT Publisher (aiomqtt)                             │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 4 : MQTT Broker (Mosquitto)  ← Route 1                   │
+├─────────────────────────────┬───────────────────────────────────┤
+│ Layer 3 : Consumer (TS) ←─┘ │ Observer (Display)  ← Route 1     │
+│           ← Route 3          └─→ (mqtt_observer.py, mosquitto)   │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 2 : TimescaleDB (hypertable)  ← Routes 3, 4              │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 1 : Physics & Config (Foundation)                        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-Services démarrés :
-- `mosquitto` — broker MQTT sur le port 1883
-- `iot-twin` — simulateur + API FastAPI sur le port 8000
-- `dashboard` — Streamlit sur le port 8501
+**5 routes de télémétrie :**
+1. **MQTT Direct** — Real-time <100ms
+2. **API REST** — Control ~50ms
+3. **MQTT→TimescaleDB** — Historical ~1s
+4. **TimescaleDB→Grafana** — Executive ~500ms
+5. **Streamlit+WebSocket** — Interactive <500ms
 
-### Profil storage (TimescaleDB + consumer + Grafana)
+**→ Comparaison complète : [DATA_FLOWS_SUMMARY.md](documents/DATA_FLOWS_SUMMARY.md) (2 min) ou [TELEMETRY_FLOWS.md](documents/TELEMETRY_FLOWS.md) (20 min)**
 
+---
+
+## 🧪 Tester par Couche d'Architecture
+
+```bash
+# Layer 1 (Physics & Config) — 0 dépendances
+pytest tests/test_physics.py tests/test_config.py -v     # 1 min
+
+# Layer 2 (Simulation Core) — 0 dépendances
+pytest tests/test_machine*.py tests/test_energy*.py -v   # 2 min
+
+# Layer 3 (MQTT) — 0 dépendances
+pytest tests/test_mqtt_integration.py tests/test_consumer_integration.py -v  # 1 min
+
+# Layer 5 (API) — API running
+pytest tests/test_api_integration.py -v                  # 2 min
+
+# Tous les tests
+pytest tests/ -v --cov=simulation --cov=config          # 5 min
+```
+
+**→ Tous les détails : [TESTING_GUIDE.md](documents/TESTING_GUIDE.md)**
+
+---
+
+## 🔌 Scénarios Disponibles
+
+| Scénario | Durée | Cas d'usage |
+|----------|-------|-----------|
+| **nominal** | 1-60m | Charge stable, baseline |
+| **stress** | 2-60m | Tests de limite thermique |
+| **heatwave** | 24h | Vague de chaleur + rush hours |
+| **busy_weeks** | 7d | Cycles réalistes (weekday/weekend) |
+
+```bash
+# Exemples
+python scripts/run_simulator.py --scenario nominal --duration 10m
+python scripts/run_simulator.py --scenario heatwave --duration 24h
+python scripts/run_simulator.py --scenario busy_weeks --duration 7d
+```
+
+---
+
+## 💾 Stockage & Persistence
+
+### Sans stockage (5 min setup)
+- MQTT direct (en mémoire)
+- FastAPI cache
+- Streamlit UI state
+
+### Avec stockage (30 min setup)
 ```bash
 docker compose --profile storage up -d
+# Lance : Mosquitto + TimescaleDB + Consumer + Grafana
 ```
 
-Services supplémentaires :
-- `timescaledb` — PostgreSQL + extension TimescaleDB sur le port 5432
-- `mqtt-consumer` — abonné MQTT → écrit dans TimescaleDB
-- `grafana` — dashboards sur le port 3000 (admin / admin)
-
-### Variables d'environnement utiles
-
-| Variable | Défaut | Rôle |
-|---|---|---|
-| `SCENARIO` | `nominal` | Scénario de charge |
-| `CLUSTER_ID` | `cluster_alpha` | Identifiant du cluster |
-| `MQTT_ENABLED` | `1` | Désactiver MQTT (`0`) |
-| `POSTGRES_PASSWORD` | `jumeaux` | Mot de passe TimescaleDB / Grafana datasource |
-
-### Arrêt et nettoyage
-
-```bash
-docker compose down
-docker compose --profile storage down -v
-```
 
 ---
 
-## Accès aux services
+## 📊 État du Projet
 
-### Depuis la machine hôte / un client externe
+### Phase 7 ✅ COMPLETE
+Fondations pédagogiques solides avec 155+ tests unitaires (85% couverture)
 
-| Service | URL / hôte | Port | Détails |
-|---|---|---:|---|
-| API FastAPI | `http://localhost:8000` | 8000 | Endpoint racine `/` |
-| Documentation OpenAPI | `http://localhost:8000/docs` | 8000 | Swagger UI |
-| WebSocket cluster | `ws://localhost:8000/ws/cluster` | 8000 | Flux temps réel du snapshot |
-| Dashboard Streamlit | `http://localhost:8501` | 8501 | Interface utilisateur |
-| Broker MQTT Mosquitto | `localhost` | 1883 | Accès MQTT TCP |
-| MQTT over WebSocket | `ws://localhost:9001` | 9001 | Pour clients MQTT WebSocket |
-| TimescaleDB | `localhost` | 5432 | Base PostgreSQL/TimescaleDB |
-| Grafana | `http://localhost:3000` | 3000 | Login par défaut : `admin / admin` |
+- 7.1 Config YAML multi-level ✅
+- 7.2 Physique thermique ✅
+- 7.3 Machine simulator ✅
+- 7.4 MQTT intégration ✅
+- 7.5 TimescaleDB consumer ✅
 
-### Depuis un autre conteneur Docker du même réseau Compose
+### Phase 8 🔄 En cours
+Extensions pédagogiques prioritaires
 
-| Service | Adresse interne | Port |
-|---|---|---:|
-| API FastAPI | `http://iot-twin:8000` | 8000 |
-| Dashboard Streamlit | `http://dashboard:8501` | 8501 |
-| Mosquitto MQTT | `mosquitto` | 1883 |
-| Mosquitto WebSocket | `mosquitto` | 9001 |
-| TimescaleDB | `timescaledb` | 5432 |
-| Grafana | `http://grafana:3000` | 3000 |
+- 8.1 Scénarios avancés + MQTT observer ✅
+  - Heatwave (vague de chaleur 24h avec pannes thermiques)
+  - Busy_weeks (cycles réalistes 7 jours)
+  - MQTT observer tool (observation temps réel)
+- 8.2 Contrôleur PID (📋 planifié)
+- 8.3 Projection coût énergétique (📋 planifié)
 
-### Exemples d'accès
+**→ Détails complets : [roadmap.md](documents/roadmap.md)**
+---
 
-```bash
-# Vérifier l'API
-curl http://localhost:8000/
+## 📖 Ressources Additionnelles
 
-# Consulter la doc interactive
-# http://localhost:8000/docs
 
-# Tester le WebSocket temps réel
-wscat -c ws://localhost:8000/ws/cluster
-
-# S'abonner aux topics MQTT
-mosquitto_sub -h localhost -t 'dt/#' -v
-
-# Se connecter à TimescaleDB
-psql -h localhost -p 5432 -U jumeaux -d jumeaux
-
-# Ouvrir Grafana
-# http://localhost:3000
-# login: admin / admin
-```
+- [change_track/PHASE_8_1_COMPLETION.md](documents/change_track/PHASE_8_1_COMPLETION.md) — Détails Phase 8.1
+- [change_track/INDEX.md](documents/change_track/INDEX.md) — Historique des changements
+- [worklog.md](documents/worklog.md) — Journal des implémentations
 
 ---
 
-## Architecture
+## 👤 Auteur
 
-```
-simulation/      Modèle physique thermique, MachineSimulator, ClusterSimulator
-mqtt/            MqttPublisher aiomqtt (Phase 3 ✅)
-api/             FastAPI lifespan + endpoints REST + WebSocket (Phase 4 ✅)
-dashboard/       Streamlit temps réel (Phase 5 ✅)
-consumer/        MQTT → TimescaleDB (Phase 6 ✅)
-config/          YAML hiérarchique OmegaConf (base + scénarios)
-tests/           pytest + pytest-asyncio
-grafana/         Provisioning datasource + dashboard (Phase 6 ✅)
-mosquitto/       Configuration broker MQTT
-```
-
-Voir [`documents/specifications.md`](documents/specifications.md) pour le détail technique complet  
-et [`documents/roadmap.md`](documents/roadmap.md) pour le suivi d'avancement.
+**Tristan Vanrullen** — La Plateforme, Marseille — 2026  
+*Master 2 Informatique — Spécialité IoT & Systèmes Distribués*
 
 ---
 
-## API FastAPI (Phase 4 ✅)
+## 📋 Checklist Rapide
 
-| Méthode | Endpoint | Description |
-|---|---|---|
-| `GET` | `/` | Info API + état simulateur |
-| `GET` | `/cluster/status` | Snapshot complet du cluster |
-| `GET` | `/cluster/energy` | Métriques énergétiques |
-| `POST` | `/cluster/power` | Allumer/éteindre tout le cluster |
-| `PUT` | `/cluster/fan_speed` | Vitesse homogène tous les fans |
-| `GET` | `/machines/{id}` | Snapshot d'une machine |
-| `POST` | `/machines/{id}/power` | Power ON/OFF (409 si T trop haute) |
-| `PUT` | `/machines/{id}/fan_speed` | Vitesse manuelle d'un fan |
-| `PUT` | `/machines/{id}/fan_mode` | Mode auto/manual d'un fan |
-| `POST` | `/simulation/fault` | Injecter une panne |
-| `DELETE` | `/simulation/fault/{id}` | Annuler les pannes d'une machine |
-| `PUT` | `/simulation/scenario` | Changer de scénario à chaud |
-| `WS` | `/ws/cluster` | Flux temps réel du snapshot |
+- [ ] Lire [QUICK_START.md](documents/QUICK_START.md) (5 min)
+- [ ] Installer & tester Phase 1 (5 min)
+- [ ] Lancer un scénario + observer MQTT (5 min)
+- [ ] Consulter [TELEMETRY_FLOWS.md](documents/TELEMETRY_FLOWS.md) pour comprendre les routes (15 min)
+- [ ] Lancer l'API & le Dashboard (5 min)
+- [ ] Lire [specifications.md](documents/specifications.md) pour comprendre le design (20 min)
+- [ ] Consulter [TESTING_GUIDE.md](documents/TESTING_GUIDE.md) pour tester par couche (10 min)
+- [ ] Vérifier [roadmap.md](documents/roadmap.md) pour les prochaines phases (10 min)
+
+**Temps total : ~75 minutes pour complète maîtrise de la plateforme**
 
 ---
 
-## Nouveaux scénarios Phase 8.1
-
-### Heatwave — Vague de chaleur
-
-Simule une augmentation progressive de la température ambiante avec oscillations et pannes accélérées.
-
-```bash
-python scripts/run_simulator.py --scenario heatwave --duration 24h
-```
-
-**Caractéristiques :**
-- T_amb augmente de 28°C à 35°C (drift +0.5°C/h)
-- Oscillations jour/nuit ±5°C (période 4h)
-- Rush hours (9-12h, 14-17h) → +50% charge
-- Pannes 3× plus fréquentes quand T > 32°C
-- **Cas d'usage :** Tester limites refroidissement, dimensionner climatisation
-
-### Busy Weeks — Semaines chargées
-
-Simule cycles réalistes jour/semaine avec rush hours et weekend calme.
-
-```bash
-python scripts/run_simulator.py --scenario busy_weeks --duration 7d
-```
-
-**Caractéristiques :**
-- Lundi-vendredi : heures creuses (00-07h, 20-23h) vs rush hours (9-12h, 14-18h)
-- Samedi-dimanche : charge minimale (5%)
-- Anomalies : lundi spike (+20%), vendredi drop (-30% après 16h)
-- **Cas d'usage :** Valider auto-scaling, analyser coûts énergétiques hebdomadaires
-
-### Observer MQTT
-
-Viewer MQTT léger pour monitoring en temps réel (alternative MQTT Explorer).
-
-```bash
-# Observer tous les topics simulateur
-python scripts/mqtt_observer.py --host localhost --port 1883
-
-# Observer topics spécifiques
-python scripts/mqtt_observer.py --topics "dt/+/+/telemetry" "dt/+/summary"
-
-# Mode verbeux (affiche tailles payloads)
-python scripts/mqtt_observer.py -v
-
-# Avec Docker
-docker exec iot-twin python scripts/mqtt_observer.py --host mosquitto
-```
-
-**Avantages :**
-- Affichage JSON pretty-print avec timestamps
-- Filtrage flexible par topic pattern
-- Pas de dépendance externe (utilise aiomqtt natif)
-
----
-
-## Topics MQTT publiés (Phase 3 ✅)
-
-| Topic | QoS | Fréquence |
-|---|---|---|
-| `dt/{cluster}/{machine}/telemetry` | 0 | `events_per_sec` |
-| `dt/{cluster}/{machine}/temp/{sensor}` | 0 | `events_per_sec` |
-| `dt/{cluster}/{machine}/power` | 0 | `events_per_sec` |
-| `dt/{cluster}/{machine}/fan/{idx}` | 0 | Sur changement |
-| `dt/{cluster}/{machine}/status` | 1 | Sur changement |
-| `dt/{cluster}/{machine}/fault` | 1 | Sur événement |
-| `dt/{cluster}/summary` | 1 | Toutes les 5 s |
-| `dt/{cluster}/metrics/energy` | 1 | Toutes les 60 s |
-
----
-
-## Structure du projet
-
-```text
-jumeaux-chauds/
-├── config/
-│   ├── base.yaml
-│   ├── loader.py
-│   └── scenarios/
-│       ├── nominal.yaml
-│       └── stress.yaml
-├── simulation/
-│   ├── cluster.py
-│   ├── machine.py
-│   ├── physics.py
-│   ├── noise.py
-│   ├── scenarios.py
-│   └── duration.py
-├── mqtt/
-│   └── publisher.py          ← Phase 3 ✅
-├── api/                      ← Phase 4 ✅
-│   ├── main.py
-│   ├── deps.py
-│   ├── models.py
-│   ├── ws.py
-│   └── routes/
-│       ├── machines.py
-│       ├── cluster.py
-│       └── simulation.py
-├── dashboard/                ← Phase 5 ✅
-│   ├── app.py
-│   ├── ws_client.py
-│   └── api_client.py
-├── consumer/                 ← Phase 6 ✅
-│   ├── mqtt_to_timescale.py
-│   └── schema.sql
-├── grafana/                  ← Phase 6 ✅
-│   └── provisioning/
-│       ├── datasources/
-│       │   └── timescale.yaml
-│       └── dashboards/
-│           ├── dashboard.yaml
-│           └── jumeaux-chauds.json
-├── mosquitto/config/
-│   └── mosquitto.conf
-├── tests/
-├── scripts/
-│   └── run_simulator.py
-├── Dockerfile
-├── Dockerfile.dashboard
-├── Dockerfile.consumer
-├── docker-compose.yml
-├── documents/
-│   ├── specifications.md
-│   └── roadmap.md
-├── requirements.txt
-├── requirements.dashboard.txt
-├── requirements.consumer.txt
-├── requirements.test.txt
-└── Makefile
-```
-
----
-
-## Phase 8 — Extensions pédagogiques (Phase 8.1 complétée ✅)
-
-### Étape 8.1 ✅ — Scénarios avancés + MQTT Observer
-
-**Scénarios créés :**
-- ✅ `config/scenarios/heatwave.yaml` — Vague de chaleur avec T_amb progressive (28→35°C), oscillations jour/nuit, pannes thermiques
-- ✅ `config/scenarios/busy_weeks.yaml` — Cycles semaine (weekday vs weekend), rush hours (9-12h, 14-18h), anomalies hebdomadales
-
-**Observer MQTT créé :**
-- ✅ `scripts/mqtt_observer.py` — Viewer MQTT léger en Python, JSON pretty-print, filtrage topics
-
-**Exécution :**
-```bash
-# Lancer avec scénario heatwave (24h de simulation)
-python scripts/run_simulator.py --scenario heatwave --duration 24h
-
-# Lancer avec scénario busy_weeks (7j de simulation)
-python scripts/run_simulator.py --scenario busy_weeks --duration 7d
-
-# Observer MQTT en temps réel
-python scripts/mqtt_observer.py --host localhost --topics "dt/#"
-```
-
----
-
-## Phase 7 — Tests (complétée ✅)
-
-### Étape 7.1 ✅ — Tests unitaires consolidés
-
-**Tests créés :**
-- `tests/test_machine_yaml_integration.py` — 40+ tests validant le chargement YAML et l'héritage de rôle
-- `tests/test_machine_telemetry.py` — 50+ tests validant la structure du snapshot et les limites physiques
-- `tests/test_machine_commands.py` — 30+ tests des commandes (fan speed, power, mode)
-- `tests/test_energy_conformity.py` — 35+ tests validant la formule P(load) et l'accumulation d'énergie
-
-**Exécution :**
-```bash
-pytest tests/test_machine_yaml_integration.py -v        # 40 tests
-pytest tests/test_machine_telemetry.py -v              # 50 tests
-pytest tests/test_machine_commands.py -v               # 30 tests
-pytest tests/test_energy_conformity.py -v              # 35 tests
-
-# Tous les tests Phase 7.1
-pytest tests/test_machine*.py tests/test_energy*.py -v --cov=simulation --cov=config --cov-report=term-missing
-```
-
-### Étape 7.3 ✅ — Tests FastAPI
-
-Tests créés :
-- ✅ `tests/test_api_integration.py` avec TestClient (23 tests)
-- ✅ Tests des 10 endpoints REST principaux
-- ✅ Validation codes d'erreur (404, 409)
-- ✅ Tests WebSocket connexion/déconnexion
-- ✅ Tests format réponses et structure données
-
-Exécution :
-```bash
-pytest tests/test_api_integration.py -v
-```
-
-### Étape 7.4 ✅ — Tests MQTT e2e
-
-Tests créés :
-- ✅ `tests/test_mqtt_integration.py` avec 18 tests
-- ✅ Tests de configuration du publisher (broker, topics, QoS)
-- ✅ Validation des 8 topics principaux
-- ✅ Structure et sérialisation JSON des payloads
-- ✅ Intégration simulation → publisher
-
-Exécution :
-```bash
-pytest tests/test_mqtt_integration.py -v
-```
-
-### Étape 7.5 ✅ — Tests consumer TimescaleDB
-
-Tests créés :
-- ✅ `tests/test_consumer_integration.py` avec 28 tests
-- ✅ Validation MQTT topic parsing (regex, cluster/machine extraction)
-- ✅ Validation JSON payload parsing (telemetry, events)
-- ✅ Conversion timestamps ISO 8601 → DateTime
-- ✅ Calcul RPM moyen fans
-- ✅ Dispatch messages vers telemetry_insert ou event_insert
-- ✅ Extraction données (temp, power, energy, status)
-- ✅ Configuration consumer (MQTT broker, PostgreSQL DSN)
-
-Exécution :
-```bash
-pytest tests/test_consumer_integration.py -v
-```
-
-**Résultat :** 28/28 tests PASSED (100%) ✅
-
----
-
-## Problèmes de nommage identifiés et corrections
-
-Voir **ANALYSE_EXHAUSTIVE.md** pour le détail complet. Résumé :
-
-| Variable | État | Action |
-|----------|------|--------|
-| `initial_rpm` | ⚠️ Ambigu | Renommer en `startup_rpm` (si pertinent) |
-| `simulation.mode` | ⚠️ Inconsistant | Renommer en `scenario` (cohérence API) |
-| `power_std_w`, `fan_speed_std_rpm` | ❌ Inexploités | À implémenter en Phase 7.2 |
-| `env_factor` | 📋 Réservé | Pour Phase 8 (scénario heatwave) |
-| `cmd_root` | 📋 Réservé | Pour Phase 8 (consumer commandes MQTT) |
-
----
-
-## Variables YAML inexploitées (Phase 8)
-
-### `env_factor: 1.05`
-Facteur d'augmentation du PUE en conditions chaudes (T_ambient > 30°C). À utiliser dans le scénario `heatwave.yaml`.
-
-### `cmd_root: "cmd"`
-Racine des topics MQTT pour les commandes. À implémenter : abonnement aux `cmd/{cluster}/{machine}/*` et exécution.
-
-### `location: "Marseille"`
-Métadonnée non exposée en API. À ajouter dans `GET /` et MQTT.
-
----
-
-## Prochaines étapes recommandées
-
-1. **Immédiat (Phase 7.2)** : Ajouter tests FastAPI (`test_api_integration.py`)
-2. **Court terme** : Tests MQTT e2e et consumer
-3. **Moyen terme** : Implémenter variables réservées (`power_std_w`, `fan_speed_std_rpm`)
-4. **Phase 8** : Scénario heatwave + consumer de commandes MQTT
-
----
-
-*Tristan Vanrullen — La Plateforme, Marseille — 2026*  
-*Phase 7.1 (tests unitaires) : ✅ Complète  |  Phase 7.2-7.4 : 📋 Planifiées*
+*Dernière mise à jour : 28 mai 2026*
