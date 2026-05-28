@@ -16,7 +16,7 @@
 | 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
 | 5 — Dashboard Streamlit (temps réel, commandes, énergie) | ✅ Complète |
 | 6 — Déploiement Docker (Compose noyau + profil storage) | ✅ Complète |
-| 7 — Tests unitaires et d'intégration | 🔄 **En cours** (Phase 7.1 ✅, Phase 7.2 ✅, 7.3-7.4 📋) |
+| 7 — Tests unitaires et d'intégration | 🔄 **En cours** (Phase 7.1 ✅, Phase 7.2 ✅, Phase 7.3 ✅, 7.4-7.5 📋) |
 | 8 — Extensions pédagogiques | 🔜 Facultatif |
 
 ---
@@ -287,15 +287,21 @@ pytest tests/test_energy_conformity.py -v              # 35 tests
 pytest tests/test_machine*.py tests/test_energy*.py -v --cov=simulation --cov=config --cov-report=term-missing
 ```
 
-### Étape 7.2 📋 — Tests FastAPI (prochaine)
+### Étape 7.3 ✅ — Tests FastAPI
 
-Objectifs :
-- [ ] Créer `tests/test_api_integration.py` avec httpx
-- [ ] Tests des 10 endpoints REST principaux
-- [ ] Validation codes d'erreur (404, 409)
-- [ ] Tests WebSocket connexion/déconnexion
+Tests créés :
+- ✅ `tests/test_api_integration.py` avec TestClient (23 tests)
+- ✅ Tests des 10 endpoints REST principaux
+- ✅ Validation codes d'erreur (404, 409)
+- ✅ Tests WebSocket connexion/déconnexion
+- ✅ Tests format réponses et structure données
 
-### Étape 7.3 📋 — Tests MQTT e2e
+Exécution :
+```bash
+pytest tests/test_api_integration.py -v
+```
+
+### Étape 7.4 📋 — Tests MQTT e2e
 
 Objectifs :
 - [ ] Créer `tests/test_mqtt_integration.py`
