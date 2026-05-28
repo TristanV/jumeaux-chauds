@@ -127,6 +127,9 @@ class ClusterSimulator:
             fans = m_cfg["fans"]
             power = m_cfg["power"]
 
+            # Phase 7.2 : Extraire noise.power_std_w et noise.fan_speed_std_rpm
+            noise_cfg = m_cfg.get("noise", {})
+
             thermal_cfg = ThermalConfig(
                 idle_w=float(power["idle_watts"]),
                 max_w=float(power["max_watts"]),
@@ -143,6 +146,8 @@ class ClusterSimulator:
                 fan_max_rpm=int(fans["max_rpm"]),
                 fan_power_w=float(fans["power_per_fan_w"]),
                 tick_rate_hz=tick_rate_hz,
+                power_std_w=float(noise_cfg.get("power_std_w", 0.0)),  # Phase 7.2
+                fan_speed_std_rpm=float(noise_cfg.get("fan_speed_std_rpm", 0.0)),  # Phase 7.2
             )
 
             sensor_configs: list[SensorConfig] = []

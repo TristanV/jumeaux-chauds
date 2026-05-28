@@ -10,10 +10,11 @@ cluster:
   mqtt:
     broker_host: "mosquitto"
     broker_port: 1883
-    protocol_version: 5              # MQTTv5 via aiomqtt
+    # Note Phase 7.2 : protocol_version a été supprimé (jamais utilisé).
+    # Le broker aiomqtt négocie automatiquement la version supportée.
     client_id_prefix: "twin"
     topic_root: "dt"                 # data telemetry (convention AWS IoT)
-    cmd_root: "cmd"                  # commands
+    cmd_root: "cmd"                  # commands (réservé Phase 8)
     publish_interval_s: 1.0
     qos_telemetry: 0
     qos_events: 1                    # QoS 1 pour pannes et changements d'état

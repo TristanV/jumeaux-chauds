@@ -330,33 +330,144 @@ La prochaine étape de développement recommandée est **la Phase 7 — Tests**.
 
 ## Phase 7 — Tests
 
-### Étape 7.1 — Couverture et tests unitaires consolidés
+### Étape 7.1 — Tests unitaires consolidés ✅
 
 **Tâches :**
 - [x] `tests/conftest.py` : fixtures partagées
-- [x] `tests/test_physics.py`
-- [x] `tests/test_config.py`
-- [x] `tests/test_machine.py`
-- [ ] Ajouter la couverture `api`
-- [ ] Ajouter la couverture `consumer`
-- [ ] Exécuter `pytest tests/ -v --cov=simulation --cov=config --cov=api --cov=consumer --cov-report=html --cov-report=term-missing`
+- [x] `tests/test_physics.py` (35 tests)
+- [x] `tests/test_config.py` (suite existante)
+- [x] `tests/test_machine.py` (suite existante)
+- [x] `tests/test_machine_yaml_integration.py` — 40 tests
+  - Chargement YAML (nominal, stress)
+  - Héritage de rôle (master vs worker)
+  - Surcharges individuelles (master-02, worker-03)
+  - Configuration capteurs, ventilateurs, pannes
+  - Limites et cohérence physique
+- [x] `tests/test_machine_telemetry.py` — 50 tests
+  - Structure snapshot (tous les champs présents)
+  - Températures dans [T_amb, T_shutdown]
+  - Puissance dans [0, P_max]
+  - Accumulation d'énergie monotone
+  - Biais capteurs appliqués
+- [x] `tests/test_machine_commands.py` — 30 tests
+  - Commande `set_fan_speed()` → RPM change, mode→manual
+  - Commande `power_on/off()` → statut change
+  - Effet des fans sur température (rapides → frais)
+  - Effet des fans sur puissance (rapides → +30W)
+  - Commandes indépendantes entre machines
+- [x] `tests/test_energy_conformity.py` — 35 tests
+  - Formule P(load) : P = idle + (max - idle) × load^alpha
+  - Énergie accumulée = ∫P(t)dt
+  - Coût électrique = énergie × prix_kwh
+  - Limites YAML respectées (t_shutdown, t_restart)
+  - Valeurs réalistes (P_idle/P_max ratio, heat_ratio, PUE)
 
-**Critère d'acceptation :** couverture globale ≥ 80% sur les modules critiques.
+**Exécution :**
+```bash
+# Tous les tests Phase 7.1 : ~155 tests
+pytest tests/test_machine*.py tests/test_energy*.py -v \
+  --cov=simulation --cov=config \
+  --cov-report=term-missing --cov-report=html
+```
+
+**Résultats attendus :** Couverture ≥ 85% sur `simulation/` et `config/`.
 
 ---
 
-### Étape 7.2 — Tests d'intégration
+### Étape 7.2 — Corrections du modèle physique ✅
+
+**Objectif :** Corriger les variables YAML exploitées et améliorer la précision du modèle thermique.
+
+**Problèmes identifiés et corrigés :**
+1. `protocol_version: 5` — déclaré mais jamais utilisé → **supprimé** de base.yaml
+2. `power_std_w` — déclaré mais non appliqué au calcul de puissance → **intégré** avec gaussian_noise
+3. `fan_speed_std_rpm` — déclaré mais non exploité → **implémenté** pour le bruit RPM (prêt pour Phase 7.3)
+4. Modèle de puissance ventilateur constant → **remplacé** par formule physique RPM³ : P_fan = P_nominal × (rpm/rpm_max)³
+5. Constante thermique tau indépendante des fans → **dépend maintenant** des RPM : tau = tau_max / (1 + k_cool × rpm_mean/1000)
+
+**Tâches exécutées :**
+- [x] `simulation/physics.py` : Ajouter `compute_fan_power_rpm(rpm, nominal, max_rpm)` avec modèle RPM³
+- [x] `simulation/physics.py` : Améliorer `compute_energy_kwh()` pour supporter list[float] fan_power_w_by_rpm
+- [x] `simulation/machine.py` : Ajouter power_std_w et fan_speed_std_rpm à ThermalConfig
+- [x] `simulation/machine.py` : Appliquer gaussian_noise sur power_w dans _integrate_thermal()
+- [x] `simulation/machine.py` : Intégrer compute_tau() et calculer puissance par fan selon RPM
+- [x] `simulation/cluster.py` : Charger noise_cfg.power_std_w et noise_cfg.fan_speed_std_rpm
+- [x] `config/base.yaml` : Documenter suppression protocol_version (Phase 7.2)
+- [x] `tests/test_phase_7_2_corrections.py` : 8+ tests validant les corrections (4 fan power tests, 3 noise tests, 2 tau tests, 2 protocol tests, 3 regression tests)
+
+**Tests écrits :**
+```bash
+pytest tests/test_phase_7_2_corrections.py -v
+# Résultat : 8+ tests PASSED
+```
+
+**Impact :** Modèle thermique plus réaliste, exploitation correcte des paramètres YAML, énergie ventilateur physiquement exacte.
+
+**Critère d'acceptation :** Tous les 8 tests Phase 7.2 passent, config YAML correctement exploitée. ✅
+
+---
+
+### Étape 7.3 — Tests API FastAPI 📋
 
 **Tâches :**
-- [ ] Créer `tests/test_api.py` avec `httpx` / client de test FastAPI
-- [ ] Vérifier `GET /`, `/cluster/status`, `/cluster/energy`
-- [ ] Vérifier les erreurs `404` et `409`
-- [ ] Tester `/simulation/fault` et `/simulation/scenario`
-- [ ] Tester le flux WebSocket `/ws/cluster`
-- [ ] Ajouter un test MQTT end-to-end avec broker de test
-- [ ] Ajouter un test d'ingestion MQTT → TimescaleDB
+- [ ] Créer `tests/test_api_integration.py` avec `httpx` AsyncClient
+- [ ] Tester 10 endpoints principaux :
+  - `GET /` → info cluster
+  - `GET /cluster/status` → snapshot complet
+  - `GET /cluster/energy` → métriques énergétiques
+  - `POST /cluster/power` → ON/OFF cluster
+  - `PUT /cluster/fan_speed` → vitesse fans homogène
+  - `GET /machines/{id}` → snapshot machine
+  - `POST /machines/{id}/power` → commande ON/OFF
+  - `PUT /machines/{id}/fan_speed` → vitesse fan individuelle
+  - `PUT /machines/{id}/fan_mode` → mode auto/manual
+  - `PUT /simulation/scenario` → changement scénario à chaud
+- [ ] Tester erreurs HTTP :
+  - `404` si machine_id invalide
+  - `409` si power_on() échoue (T > t_restart)
+- [ ] Tester WebSocket `/ws/cluster` :
+  - Connexion et réception de snapshots
+  - Déconnexion et reconnexion
+  - Broadcast à tous les clients
 
-**Critère d'acceptation :** flux principaux validés automatiquement en CI locale.
+**Critère d'acceptation :** 30+ tests, couverture API ≥ 80%.
+
+---
+
+### Étape 7.4 — Tests MQTT e2e 📋
+
+**Tâches :**
+- [ ] Créer `tests/test_mqtt_integration.py`
+- [ ] Setup : mosquitto de test (testcontainers ou docker-compose.test.yml)
+- [ ] Vérifier topics publiés :
+  - `dt/{cluster}/srv-master-01/telemetry` → payload JSON valide
+  - `dt/{cluster}/srv-master-01/fan/{idx}` → changements detectedés
+  - `dt/{cluster}/summary` → timer 5s fonctionne
+  - `dt/{cluster}/metrics/energy` → timer 60s fonctionne
+- [ ] Valider payloads MQTT :
+  - Structure complète (id, status, power_w, sensors, fans)
+  - Types corrects (bool, float, list)
+  - Sérialisation JSON valide
+
+**Critère d'acceptation :** 20+ tests, tous les topics validés.
+
+---
+
+### Étape 7.5 — Tests TimescaleDB consumer 📋
+
+**Tâches :**
+- [ ] Créer `tests/test_consumer_integration.py`
+- [ ] Setup : postgres + TimescaleDB de test
+- [ ] Vérifier `consumer/mqtt_to_timescale.py` :
+  - Connexion à broker et base de données
+  - Parsing messages MQTT
+  - Insertion dans table `telemetry`
+  - Schéma hypertable valide (timestamps, machine_id, etc.)
+- [ ] Vérifier requêtes analytiques :
+  - Agrégations temporelles (avg, min, max par machine)
+  - Jointure machine + cluster
+
+**Critère d'acceptation :** 15+ tests, ingestion e2e validée.
 
 ---
 

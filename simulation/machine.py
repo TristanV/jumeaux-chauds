@@ -13,10 +13,12 @@ from typing import Literal
 from .physics import (
     compute_energy_kwh,
     compute_fan_auto_speed,
+    compute_fan_power_rpm,
     compute_heat_input,
     compute_load_power,
     compute_thermal_step,
 )
+from .noise import gaussian_noise
 
 
 MachineStatus = Literal["on", "off", "degraded"]
@@ -45,6 +47,9 @@ class ThermalConfig:
     """Paramètres thermiques d'une machine.
 
     Ces champs sont extraits depuis la configuration YAML mergée.
+
+    Changes Phase 7.2 :
+    - Ajout de power_std_w et fan_speed_std_rpm pour le bruit réaliste
     """
 
     idle_w: float
@@ -62,6 +67,8 @@ class ThermalConfig:
     fan_max_rpm: int
     fan_power_w: float
     tick_rate_hz: float
+    power_std_w: float = 0.0  # Phase 7.2 : bruit sur puissance (W)
+    fan_speed_std_rpm: float = 0.0  # Phase 7.2 : bruit sur RPM (RPM)
 
 
 @dataclass
@@ -229,7 +236,13 @@ class MachineSimulator:
     # Détails internes
     # ------------------------------------------------------------------
     def _integrate_thermal(self, load_factor: float, dt: float) -> None:
-        """Met à jour température et énergie en tenant compte des fans/pannes."""
+        """Met à jour température et énergie en tenant compte des fans/pannes.
+
+        Changes Phase 7.2 :
+        - Ajoute du bruit sur power_w et fan RPM (via gaussian_noise)
+        - Calcule la puissance des fans selon RPM³ (formule réaliste)
+        - Constante de temps tau dépend maintenant des RPM (fans -> refroidissement)
+        """
 
         # Vitesse des fans (auto vs manual)
         fan_rpms: list[int] = []
@@ -252,6 +265,11 @@ class MachineSimulator:
             max_w=self.thermal.max_w,
             alpha=self.thermal.alpha,
         )
+
+        # Phase 7.2 : Ajouter du bruit sur la puissance (capteur réaliste)
+        # power_std_w est maintenant exploité
+        power_w = gaussian_noise(power_w, std=getattr(self.thermal, 'power_std_w', 0.0))
+
         self.power_w = power_w
 
         # Application de pannes de type power_surge (surconsommation)
@@ -262,12 +280,14 @@ class MachineSimulator:
         # Chaleur injectée
         q_in = compute_heat_input(power_w=power_w, heat_ratio=self.thermal.heat_ratio)
 
-        # Constante de temps en fonction des fans
-        tau = compute_thermal_step.__defaults__  # type: ignore[assignment]
-        # On délègue le calcul de tau à compute_tau via physics, mais pour
-        # éviter un import circulaire, celui-ci est appliqué au niveau cluster.
-        # Ici on considère tau constant = tau_max_s.
-        tau = self.thermal.tau_max_s  # type: ignore[assignment]
+        # Phase 7.2 : Constante de temps dépend des fans (refroidissement actif)
+        # tau(t) = tau_max / (1 + k_cool * fan_rpm_mean / 1000)
+        from .physics import compute_tau
+        tau = compute_tau(
+            tau_max=self.thermal.tau_max_s,
+            fan_rpm_mean=fan_rpm_mean,
+            k_cool=self.thermal.k_cool,
+        )
 
         # Intégration de la température
         self.temperature_c = compute_thermal_step(
@@ -279,11 +299,21 @@ class MachineSimulator:
             dt=dt,
         )
 
-        # Mise à jour de l'énergie consommée
+        # Phase 7.2 : Calculer la puissance réelle de chaque fan selon RPM³
+        fan_powers_w: list[float] = []
+        for rpm in fan_rpms:
+            fan_power = compute_fan_power_rpm(
+                rpm=rpm,
+                fan_power_w_nominal=self.thermal.fan_power_w,
+                fan_max_rpm=self.thermal.fan_max_rpm,
+            )
+            fan_powers_w.append(fan_power)
+
+        # Mise à jour de l'énergie consommée (mode avancé avec RPM³)
         delta_kwh = compute_energy_kwh(
             power_w=power_w,
             fan_count=len(self.fans),
-            fan_power_w=self.thermal.fan_power_w,
+            fan_power_w_by_rpm=fan_powers_w,  # Nouveau paramètre
             tick_rate_hz=self.thermal.tick_rate_hz,
         )
         self.energy_kwh_cumulated += delta_kwh

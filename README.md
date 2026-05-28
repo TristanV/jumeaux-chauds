@@ -16,7 +16,7 @@
 | 4 — API FastAPI (lifespan, endpoints REST, WebSocket) | ✅ Complète |
 | 5 — Dashboard Streamlit (temps réel, commandes, énergie) | ✅ Complète |
 | 6 — Déploiement Docker (Compose noyau + profil storage) | ✅ Complète |
-| 7 — Tests d'intégration | 🔄 Prochaine priorité |
+| 7 — Tests unitaires et d'intégration | 🔄 **En cours** (Phase 7.1 ✅, Phase 7.2 ✅, 7.3-7.4 📋) |
 | 8 — Extensions pédagogiques | 🔜 Facultatif |
 
 ---
@@ -266,19 +266,86 @@ jumeaux-chauds/
 
 ---
 
-## Prochaine étape de développement
+## Phase 7 — Tests (actuellement en cours)
 
-La prochaine priorité du projet est la **Phase 7 — Tests d'intégration et couverture**.
+### Étape 7.1 ✅ — Tests unitaires consolidés
+
+**Tests créés :**
+- `tests/test_machine_yaml_integration.py` — 40+ tests validant le chargement YAML et l'héritage de rôle
+- `tests/test_machine_telemetry.py` — 50+ tests validant la structure du snapshot et les limites physiques
+- `tests/test_machine_commands.py` — 30+ tests des commandes (fan speed, power, mode)
+- `tests/test_energy_conformity.py` — 35+ tests validant la formule P(load) et l'accumulation d'énergie
+
+**Exécution :**
+```bash
+pytest tests/test_machine_yaml_integration.py -v        # 40 tests
+pytest tests/test_machine_telemetry.py -v              # 50 tests
+pytest tests/test_machine_commands.py -v               # 30 tests
+pytest tests/test_energy_conformity.py -v              # 35 tests
+
+# Tous les tests Phase 7.1
+pytest tests/test_machine*.py tests/test_energy*.py -v --cov=simulation --cov=config --cov-report=term-missing
+```
+
+### Étape 7.2 📋 — Tests FastAPI (prochaine)
 
 Objectifs :
-- sécuriser les endpoints FastAPI ;
-- valider le flux WebSocket temps réel ;
-- tester la publication MQTT de bout en bout ;
-- vérifier l'ingestion MQTT → TimescaleDB ;
-- mesurer et améliorer la couverture de code.
+- [ ] Créer `tests/test_api_integration.py` avec httpx
+- [ ] Tests des 10 endpoints REST principaux
+- [ ] Validation codes d'erreur (404, 409)
+- [ ] Tests WebSocket connexion/déconnexion
 
-Cette étape permettra de stabiliser le socle existant avant d'ajouter de nouvelles extensions pédagogiques ou des fonctionnalités avancées d'observabilité.
+### Étape 7.3 📋 — Tests MQTT e2e
+
+Objectifs :
+- [ ] Créer `tests/test_mqtt_integration.py`
+- [ ] Broker de test (testcontainers ou mosquitto)
+- [ ] Valider flux simulation → MQTT → subscriber
+
+### Étape 7.4 📋 — Tests consumer TimescaleDB
+
+Objectifs :
+- [ ] Créer `tests/test_consumer_integration.py`
+- [ ] Valider MQTT → consumer → TimescaleDB
+- [ ] Vérifier schéma et ingestion
 
 ---
 
-*Tristan Vanrullen — La Plateforme, Marseille — 2026*
+## Problèmes de nommage identifiés et corrections
+
+Voir **ANALYSE_EXHAUSTIVE.md** pour le détail complet. Résumé :
+
+| Variable | État | Action |
+|----------|------|--------|
+| `initial_rpm` | ⚠️ Ambigu | Renommer en `startup_rpm` (si pertinent) |
+| `simulation.mode` | ⚠️ Inconsistant | Renommer en `scenario` (cohérence API) |
+| `power_std_w`, `fan_speed_std_rpm` | ❌ Inexploités | À implémenter en Phase 7.2 |
+| `env_factor` | 📋 Réservé | Pour Phase 8 (scénario heatwave) |
+| `cmd_root` | 📋 Réservé | Pour Phase 8 (consumer commandes MQTT) |
+
+---
+
+## Variables YAML inexploitées (Phase 8)
+
+### `env_factor: 1.05`
+Facteur d'augmentation du PUE en conditions chaudes (T_ambient > 30°C). À utiliser dans le scénario `heatwave.yaml`.
+
+### `cmd_root: "cmd"`
+Racine des topics MQTT pour les commandes. À implémenter : abonnement aux `cmd/{cluster}/{machine}/*` et exécution.
+
+### `location: "Marseille"`
+Métadonnée non exposée en API. À ajouter dans `GET /` et MQTT.
+
+---
+
+## Prochaines étapes recommandées
+
+1. **Immédiat (Phase 7.2)** : Ajouter tests FastAPI (`test_api_integration.py`)
+2. **Court terme** : Tests MQTT e2e et consumer
+3. **Moyen terme** : Implémenter variables réservées (`power_std_w`, `fan_speed_std_rpm`)
+4. **Phase 8** : Scénario heatwave + consumer de commandes MQTT
+
+---
+
+*Tristan Vanrullen — La Plateforme, Marseille — 2026*  
+*Phase 7.1 (tests unitaires) : ✅ Complète  |  Phase 7.2-7.4 : 📋 Planifiées*

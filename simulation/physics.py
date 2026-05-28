@@ -124,26 +124,65 @@ def compute_fan_auto_speed(
     return int(max(0, min(f_max, raw)))
 
 
+def compute_fan_power_rpm(
+    rpm: int,
+    fan_power_w_nominal: float,
+    fan_max_rpm: int,
+) -> float:
+    """Calcule la puissance consommée par un ventilateur en fonction du RPM.
+
+    Modèle cubique : P_fan(rpm) = P_nominal × (rpm / rpm_max)³
+
+    Justification physique : la puissance aérodynamique augmente avec le cube
+    de la vitesse (loi du cube du ventilateur).
+
+    Args:
+        rpm:                   Vitesse instantanée (RPM).
+        fan_power_w_nominal:   Puissance à RPM max (W).
+        fan_max_rpm:           RPM maximal du ventilateur.
+
+    Returns:
+        Puissance consommée par ce ventilateur (W).
+    """
+    if fan_max_rpm <= 0 or rpm <= 0:
+        return 0.0
+    ratio = float(rpm) / float(fan_max_rpm)
+    return fan_power_w_nominal * (ratio ** 3)
+
+
 def compute_energy_kwh(
     power_w: float,
     fan_count: int,
-    fan_power_w: float,
-    tick_rate_hz: float,
+    fan_power_w_by_rpm: list[float] | None = None,
+    fan_power_w: float | None = None,
+    tick_rate_hz: float = 10.0,
 ) -> float:
     """Calcule l'incrément d'énergie consommée pendant un tick.
 
-    E_tick = (P_machine + n_fans * P_fan) / tick_rate / 3_600_000
+    Support de deux modes :
+    - Mode simple (rétro-compatible) : E = (P_machine + n_fans * P_fan_constant) / tick_rate
+    - Mode avancé : E = (P_machine + sum(P_fan(rpm_i))) / tick_rate
 
     Args:
-        power_w:      Puissance électrique de la machine (W).
-        fan_count:    Nombre de fans actifs.
-        fan_power_w:  Puissance consommée par fan (W).
-        tick_rate_hz: Fréquence de simulation (Hz).
+        power_w:              Puissance électrique de la machine (W).
+        fan_count:            Nombre de fans (ignoré si fan_power_w_by_rpm fourni).
+        fan_power_w_by_rpm:   Liste des puissances par fan calculées (W). Si fourni,
+                              fan_power_w est ignoré.
+        fan_power_w:          Puissance constante par fan pour le mode simple (W).
+                              Ignoré si fan_power_w_by_rpm est fourni.
+        tick_rate_hz:         Fréquence de simulation (Hz).
 
     Returns:
         Énergie incrémentale en kWh.
     """
-    total_w = power_w + fan_count * fan_power_w
+    if fan_power_w_by_rpm is not None:
+        # Mode avancé : puissance réelle par RPM
+        total_w = power_w + sum(fan_power_w_by_rpm)
+    else:
+        # Mode simple (rétro-compatible)
+        fan_power_w = fan_power_w or 0.0
+        total_w = power_w + fan_count * fan_power_w
+
     dt = 1.0 / tick_rate_hz
     return total_w * dt / 3_600_000.0
 
