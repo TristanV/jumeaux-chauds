@@ -228,6 +228,8 @@ class TestPowerCommand:
         simulator = ClusterSimulator(cfg)
         machine = simulator.machines["srv-master-01"]
 
+        # Machine démarre ON par défaut (config YAML), donc l'éteindre d'abord
+        machine.power_off()
         assert machine.status == "off"
 
         machine.power_on()
@@ -252,6 +254,9 @@ class TestPowerCommand:
         cfg = load_config("nominal")
         simulator = ClusterSimulator(cfg)
         machine = simulator.machines["srv-master-01"]
+
+        # Éteindre d'abord (machine démarre ON par défaut)
+        machine.power_off()
 
         t_restart = machine.thermal.t_restart_c
         machine.temperature_c = t_restart + 5.0

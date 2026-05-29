@@ -209,7 +209,26 @@ class MachineSimulator:
 
         # Si la machine est éteinte, on ne simule que le refroidissement passif.
         if self.status == "off":
-            self._integrate_thermal(load_factor=0.0, dt=dt)
+            self.power_w = 0.0  # Bug #2 Fix: No power when OFF
+            # Passive cooling only - no energy accumulation
+            # Just cool down the machine without consuming power
+            q_in = 0.0  # No heat input when OFF
+            from .physics import compute_tau
+            tau = compute_tau(
+                tau_max=self.thermal.tau_max_s,
+                fan_rpm_mean=0.0,  # Fans off
+                k_cool=self.thermal.k_cool,
+            )
+            from .physics import compute_thermal_step
+            self.temperature_c = compute_thermal_step(
+                t_current=self.temperature_c,
+                q_in=q_in,
+                tau=tau,
+                c_th=self.thermal.c_th_j_per_c,
+                t_amb=self.thermal.ambient_temp_c,
+                dt=dt,
+            )
+            # NO energy accumulation when OFF
             return
 
         # Machine en fonctionnement (on ou degraded)
@@ -309,6 +328,10 @@ class MachineSimulator:
             )
             fan_powers_w.append(fan_power)
 
+        # Bug #9 Fix : Inclure la puissance des fans dans le snapshot
+        power_w_total = power_w + sum(fan_powers_w)
+        self.power_w = power_w_total
+
         # Mise à jour de l'énergie consommée (mode avancé avec RPM³)
         delta_kwh = compute_energy_kwh(
             power_w=power_w,
@@ -328,16 +351,15 @@ class MachineSimulator:
         topics MQTT est effectué par la couche publisher.
         """
 
-        sensors_payload: list[dict] = []
+        # Bug #11 Fix : Retourner sensors comme dict (clé = sensor_id)
+        sensors_payload: dict[str, dict] = {}
         for sensor in self._sensors:
-            sensors_payload.append(
-                {
-                    "sensor_id": sensor.config.sensor_id,
-                    # La dérive et le bruit seront appliqués plus tard
-                    # (Phase 3 lors de la génération des messages capteurs).
-                    "temp_c": self.temperature_c + sensor.config.bias_c,
-                }
-            )
+            sensors_payload[sensor.config.sensor_id] = {
+                # La dérive et le bruit seront appliqués plus tard
+                # (Phase 3 lors de la génération des messages capteurs).
+                "temp_c": self.temperature_c + sensor.config.bias_c,
+                "bias_c": sensor.config.bias_c,
+            }
 
         fans_payload = [
             {"idx": idx, "rpm": fan.rpm, "mode": fan.mode}

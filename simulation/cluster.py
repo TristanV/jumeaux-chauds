@@ -264,9 +264,11 @@ class ClusterSimulator:
                 snap = machine.snapshot()
                 snap["cluster_id"] = self.cluster_id
                 snap["machine_id"] = machine.id
+                # Bug #11 Fix : sensors est maintenant dict, pas list
+                sensors_dict = snap.get("sensors", {})
                 snap["temperatures"] = {
-                    s["sensor_id"]: {"value_c": s["temp_c"]}
-                    for s in snap.get("sensors", [])
+                    sensor_id: {"value_c": sensor_data["temp_c"]}
+                    for sensor_id, sensor_data in sensors_dict.items()
                 }
                 snap["power_w"] = snap.get("power_w", 0.0)
 
@@ -320,6 +322,27 @@ class ClusterSimulator:
         """Demande l'arrêt de la boucle de simulation."""
 
         self._running = False
+
+    def _tick(self) -> None:
+        """Effectue un seul pas de simulation pour toutes les machines.
+
+        Utile pour les tests : permet de simuler un tick sans lancer la boucle async.
+        Phase 8.2 : Bug #6-8 fix — ajouter cette méthode pour les tests.
+        """
+        dt = 1.0 / self._tick_rate_hz
+        load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
+
+        # Tick pour chaque machine
+        for machine in self.machines.values():
+            machine.tick(load_factor=load_factor, dt=dt)
+
+        # Planification de pannes
+        self._fault_scheduler.tick(self.machines, dt=dt)
+
+        # Mise à jour des métriques agrégées
+        self._update_metrics()
+
+        self._t_elapsed_s += dt
 
     # ------------------------------------------------------------------
     # Métriques & snapshot

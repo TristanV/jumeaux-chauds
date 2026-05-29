@@ -153,7 +153,7 @@ def compute_fan_power_rpm(
 def compute_energy_kwh(
     power_w: float,
     fan_count: int,
-    fan_power_w_by_rpm: list[float] | None = None,
+    fan_power_w_by_rpm: list[float] | float | None = None,
     fan_power_w: float | None = None,
     tick_rate_hz: float = 10.0,
 ) -> float:
@@ -163,21 +163,28 @@ def compute_energy_kwh(
     - Mode simple (rétro-compatible) : E = (P_machine + n_fans * P_fan_constant) / tick_rate
     - Mode avancé : E = (P_machine + sum(P_fan(rpm_i))) / tick_rate
 
+    Bug #10 Fix : Gérer les deux cas pour fan_power_w_by_rpm (list ou float)
+
     Args:
         power_w:              Puissance électrique de la machine (W).
-        fan_count:            Nombre de fans (ignoré si fan_power_w_by_rpm fourni).
-        fan_power_w_by_rpm:   Liste des puissances par fan calculées (W). Si fourni,
-                              fan_power_w est ignoré.
+        fan_count:            Nombre de fans (ignoré si fan_power_w_by_rpm fourni comme list).
+        fan_power_w_by_rpm:   Liste des puissances par fan calculées (W), ou float legacy.
+                              Si list, utilise mode avancé. Si float, interprète comme fan_power_w.
         fan_power_w:          Puissance constante par fan pour le mode simple (W).
-                              Ignoré si fan_power_w_by_rpm est fourni.
+                              Ignoré si fan_power_w_by_rpm est fourni comme list.
         tick_rate_hz:         Fréquence de simulation (Hz).
 
     Returns:
         Énergie incrémentale en kWh.
     """
     if fan_power_w_by_rpm is not None:
-        # Mode avancé : puissance réelle par RPM
-        total_w = power_w + sum(fan_power_w_by_rpm)
+        if isinstance(fan_power_w_by_rpm, list):
+            # Mode avancé : puissance réelle par RPM
+            total_w = power_w + sum(fan_power_w_by_rpm)
+        else:
+            # Mode legacy : float reçu au lieu de list
+            # Interprète comme puissance constante par fan
+            total_w = power_w + fan_count * float(fan_power_w_by_rpm)
     else:
         # Mode simple (rétro-compatible)
         fan_power_w = fan_power_w or 0.0

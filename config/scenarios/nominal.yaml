@@ -12,6 +12,7 @@ simulation:
 
   noise:
     enabled: true
+    temperature_std_c: 0.3
     spike_probability: 0.002
     spike_magnitude_c: 2.0
     drift:

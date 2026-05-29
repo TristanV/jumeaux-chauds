@@ -219,9 +219,10 @@ class TestResponseFormats:
         response = api_client.get("/machines/srv-master-01")
         data = response.json()
         assert len(data["sensors"]) > 0
-        for sensor in data["sensors"]:
-            assert "sensor_id" in sensor
-            assert "temp_c" in sensor
+        # sensors est un dict[sensor_id, {temp_c, bias_c}]
+        for sensor_id, sensor_data in data["sensors"].items():
+            assert isinstance(sensor_id, str)
+            assert "temp_c" in sensor_data
 
 
 if __name__ == "__main__":

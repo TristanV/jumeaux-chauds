@@ -115,7 +115,7 @@ class TestMachineEnergyConsistency:
 
             # Approx : Δ E ≈ (P_before + P_after) / 2 * dt
             avg_power = (power_before + power_after) / 2
-            accumulated_energy += avg_power * dt / 3600  # Convertir Wh en kWh
+            accumulated_energy += avg_power * dt / 3_600_000.0  # Convertir W·s en kWh
 
         # Comparer avec energy_kwh_cumulated
         measured_energy = machine.energy_kwh_cumulated

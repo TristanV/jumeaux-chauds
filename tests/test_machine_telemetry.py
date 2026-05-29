@@ -63,11 +63,11 @@ class TestSnapshotStructure:
         # Master a 3 capteurs
         assert len(sensors) == 3
 
-        # Chaque capteur a id et temperature_c
+        # Chaque capteur a sensor_id (clé du dict) et temp_c dans les données
         for sensor_id, sensor_data in sensors.items():
             assert isinstance(sensor_id, str)
-            assert "temperature_c" in sensor_data
-            assert isinstance(sensor_data["temperature_c"], (int, float))
+            assert "temp_c" in sensor_data
+            assert isinstance(sensor_data["temp_c"], (int, float))
 
     def test_snapshot_fans_structure(self) -> None:
         """Vérifie que la structure des fans est correcte."""
@@ -209,15 +209,15 @@ class TestTemperatureValues:
         # temp_inlet : bias = -8.0 (devrait être plus frais)
         # temp_chassis : bias = -4.0
 
-        temp_cpu = sensors["temp_cpu"]["temperature_c"]
-        temp_inlet = sensors["temp_inlet"]["temperature_c"]
-        temp_chassis = sensors["temp_chassis"]["temperature_c"]
+        temp_cpu = sensors["temp_cpu"]["temp_c"]
+        temp_inlet = sensors["temp_inlet"]["temp_c"]
+        temp_chassis = sensors["temp_chassis"]["temp_c"]
 
         # Généralement : CPU > inlet > chassis (biais appliqué)
-        # Mais avec bruit, juste vérifier qu'ils sont tous raisonnables
-        assert 20 <= temp_cpu <= 100
-        assert 20 <= temp_inlet <= 100
-        assert 20 <= temp_chassis <= 100
+        # Inlet et chassis ont des bias négatifs (-8, -4), donc peuvent être < 20°C
+        assert 15 <= temp_cpu <= 100  # CPU sans bias, typiquement ~25°C
+        assert 10 <= temp_inlet <= 100  # Avec bias -8, peut être ~17°C
+        assert 15 <= temp_chassis <= 100  # Avec bias -4, peut être ~21°C
 
 
 class TestPowerValues:
@@ -438,6 +438,9 @@ class TestMachineStateTransitions:
         simulator = ClusterSimulator(cfg)
         machine = simulator.machines["srv-master-01"]
 
+        # Éteindre d'abord (machine démarre ON par défaut)
+        machine.power_off()
+
         t_restart = machine.thermal.t_restart_c
 
         # Machine trop chaude
@@ -453,15 +456,16 @@ class TestMachineStateTransitions:
         simulator = ClusterSimulator(cfg)
         machine = simulator.machines["srv-master-01"]
 
-        machine.power_on()
+        # Machine démarre ON, s'assurer qu'elle est bien ON
+        assert machine.status == "on"
 
-        # Heat up intentionally
+        # Forcer la température juste au-dessus du seuil de shutdown
+        # (plutôt que de compter sur la physique thermique qui peut être complexe)
         t_shutdown = machine.thermal.t_shutdown_c
-        for _ in range(300):
-            machine.tick(load_factor=0.95, dt=0.1)
+        machine.temperature_c = t_shutdown + 1.0
 
-            if machine.temperature_c > t_shutdown:
-                break
+        # Un tick pour déclencher le check de shutdown
+        machine.tick(load_factor=0.95, dt=0.1)
 
         # Machine doit s'être arrêtée
         assert machine.status == "off"

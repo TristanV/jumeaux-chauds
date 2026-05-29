@@ -311,11 +311,12 @@ class TestMqttSimulationIntegration:
         assert "sensors" in snapshot
         assert len(snapshot["sensors"]) > 0
 
-        for sensor in snapshot["sensors"]:
-            assert "sensor_id" in sensor
-            assert "temp_c" in sensor
-            assert isinstance(sensor["temp_c"], (int, float))
-            assert 10.0 <= sensor["temp_c"] <= 95.0
+        # sensors est un dict[sensor_id, {temp_c, bias_c}]
+        for sensor_id, sensor_data in snapshot["sensors"].items():
+            assert isinstance(sensor_id, str)
+            assert "temp_c" in sensor_data
+            assert isinstance(sensor_data["temp_c"], (int, float))
+            assert 10.0 <= sensor_data["temp_c"] <= 95.0
 
 
 @pytest.mark.asyncio

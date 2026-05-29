@@ -17,8 +17,13 @@ class FanResponse(BaseModel):
 
 
 class SensorResponse(BaseModel):
-    sensor_id: str
+    """Réponse pour un capteur de température.
+
+    Correspond à la structure retournée par machine.snapshot():
+    {sensor_id: {"temp_c": float, "bias_c": float}}
+    """
     temp_c: float
+    bias_c: float = 0.0
 
 
 class FaultResponse(BaseModel):
@@ -28,13 +33,18 @@ class FaultResponse(BaseModel):
 
 
 class MachineSnapshot(BaseModel):
+    """Snapshot d'une machine simulée.
+
+    Le champ 'sensors' est un dictionnaire indexé par sensor_id,
+    reflétant la structure retournée par MachineSimulator.snapshot().
+    """
     id: str
     role: str
     status: Literal["on", "off", "degraded"]
     temperature_c: float
     energy_kwh_cumulated: float
     fans: list[FanResponse]
-    sensors: list[SensorResponse]
+    sensors: dict[str, SensorResponse]  # Changed from list to dict
     faults: list[FaultResponse]
 
 

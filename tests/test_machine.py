@@ -114,7 +114,7 @@ def test_snapshot_contains_expected_keys() -> None:
     assert "temperature_c" in snap
     assert "energy_kwh_cumulated" in snap
     assert isinstance(snap["fans"], list)
-    assert isinstance(snap["sensors"], list)
+    assert isinstance(snap["sensors"], dict)  # sensors est un dict[sensor_id, {temp_c, bias_c}]
 
 
 def test_energy_increases_with_ticks() -> None:
