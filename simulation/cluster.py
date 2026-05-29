@@ -347,7 +347,11 @@ class ClusterSimulator:
     # ------------------------------------------------------------------
     # Métriques & snapshot
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Métriques & snapshot
+    # ------------------------------------------------------------------
     def _update_metrics(self) -> None:
+        """Recalcule les métriques agrégées du cluster."""
         self.energy_kwh_total = sum(
             m.energy_kwh_cumulated for m in self.machines.values()
         )
@@ -360,7 +364,6 @@ class ClusterSimulator:
 
     def get_snapshot(self) -> dict:
         """Retourne un snapshot consolidé du cluster."""
-
         return {
             "cluster_id": self.cluster_id,
             "ts": datetime.now(timezone.utc).isoformat(),
