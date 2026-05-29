@@ -268,7 +268,7 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     if sensors:
         st.subheader("🌡️ Sondes thermiques")
         st.dataframe(
-            [{"Sonde": s["sensor_id"], "Temp (°C)": f"{s['temp_c']:.1f}"} for s in sensors],
+            [{"Sonde": sensor_id, "Temp (°C)": f"{s['temp_c']:.1f}"} for sensor_id, s in sensors.items()],
             use_container_width=True, hide_index=True,
         )
 
@@ -345,7 +345,10 @@ def tab_simulation(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     st.subheader("🎬 Scénario actif")
     col1, col2 = st.columns([2, 1])
     with col1:
-        scenario = st.selectbox("Choisir un scénario", ["nominal", "stress"], key="sel_scenario")
+        # Récupérer les scénarios disponibles depuis l'API
+        scenarios_response = api.get_scenarios()
+        available_scenarios = scenarios_response.get("available_scenarios", ["nominal", "stress"])
+        scenario = st.selectbox("Choisir un scénario", available_scenarios, key="sel_scenario")
     with col2:
         st.write("")
         if st.button("🔄 Changer de scénario", key="btn_scenario"):
@@ -456,6 +459,30 @@ def main() -> None:
     ws = get_ws_client()
     api = get_api_client()
     snapshot = ws.get_snapshot()
+
+    # Si pas encore de snapshot depuis WebSocket, récupérer depuis l'API (première charge)
+    if snapshot is None:
+        try:
+            snapshot = api.get_cluster_status()
+        except Exception as e:
+            st.warning(f"⚠️ Impossible de récupérer l'état initial : {e}")
+            snapshot = None
+
+    # Récupérer le scénario actif depuis l'API
+    try:
+        api_info = api._get("/")  # Appel direct pour obtenir les infos générales
+        scenario_active = api_info.get("scenario_active", "unknown")
+    except Exception:
+        scenario_active = "unknown"
+
+    # En-tête avec scénario actif
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.title("🌡️ Jumeaux Chauds — Digital Twin")
+    with col2:
+        st.markdown(f"<div style='text-align: right; padding-top: 12px;'>"
+                   f"<b>Scénario actif :</b><br/><code>{scenario_active}</code>"
+                   f"</div>", unsafe_allow_html=True)
 
     render_sidebar(snapshot)
 

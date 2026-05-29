@@ -1,80 +1,30 @@
-# Heatwave Scenario — Vague de chaleur avec saisonnalité progressive
-#
-# Paramètres :
-# - Temperature ambiante progressive de 28°C à 35°C (drift +0.5°C/h)
-# - Oscillations jour/nuit ±5°C (période 4h)
-# - Pics de charge (rush hours) 9-12h et 14-17h
-# - Pannes accélérées en conditions chaudes (T > 32°C)
-#
-# Cas d'usage : Observer dégradation sous stress thermique
+simulation:
+  mode: "heatwave"
+  tick_rate_hz: 10.0
+  events_per_sec: 1.0
+  duration: "0"
 
-scenario:
-  name: "heatwave"
-  description: "Heat wave with progressive ambient temperature rise and thermal stress"
-  duration_s: 86400.0  # 24 heures
+  load_profile:
+    type: "sine_wave"
+    base_load: 0.55
+    amplitude: 0.30
+    period_s: 600.0
 
-# Load profile — base charge
-load:
-  profile: "sine_wave"
-  amplitude: 0.3
-  offset: 0.4
-  frequency_hz: 0.0001  # Slow 2-hour oscillation
+  noise:
+    enabled: true
+    temperature_std_c: 0.5
+    spike_probability: 0.005
+    spike_magnitude_c: 3.0
+    drift:
+      enabled: true
+      rate_c_per_s: 0.0001
 
-  # Rush hours — pics de charge
-  rush_hours:
-    - start_hour: 9
-      end_hour: 12
-      load_multiplier: 1.5
-    - start_hour: 14
-      end_hour: 17
-      load_multiplier: 1.3
-
-# Environment — température ambiante progressive
-environment:
-  # Base + saisonnalité
-  base_ambient_temp_c: 28.0
-  seasonal_amplitude_c: 5.0
-  seasonal_period_s: 14400.0  # 4 heures (jour/nuit)
-
-  # Drift progressif (hausse continue)
-  drift_enabled: true
-  drift_rate_c_per_hour: 0.5   # +0.5°C/h = +12°C/24h
-  drift_max_c: 35.0            # Plafond
-
-# Faults — pannes accélérées sous chaleur
-faults:
-  enabled: true
-
-  # Taux de base
-  base_rate: 0.001  # 1 panne/1000 ticks
-
-  # Sensibilité à la température
-  temp_sensitivity: true
-  temp_threshold_c: 32.0
-  rate_multiplier_hot: 3.0  # 3× plus fréquent quand T > 32°C
-
-  # Distributions des pannes
-  distributions:
-    - type: "weibull"
-      weight: 0.4
-      shape: 1.5
-      scale: 3600.0
-      fault_types: ["cpu_throttle", "memory_error"]
-
-    - type: "exponential"
-      weight: 0.4
-      mean_s: 1800.0
-      fault_types: ["fan_degraded", "psu_dropout"]
-
-    - type: "uniform"
-      weight: 0.2
-      min_s: 600.0
-      max_s: 3600.0
-      fault_types: ["thermal_sensor_drift"]
-
-# Description pour logs
-notes: |
-  Scénario de vague de chaleur synthétique pour test de résilience.
-  Simule conditions météo extrêmes : température croissante, pics de charge,
-  pannes cascadantes dues au stress thermique.
-  Idéal pour dimensionner systèmes de refroidissement et UPS.
+  fault_injection:
+    enabled: true
+    faults:
+      - type: "thermal_runaway"
+        distribution: "exponential"
+        scale_s: 3600.0
+        probability_per_tick: 0.0002
+        magnitude: 1.5
+    recovery_delay_s: 60.0

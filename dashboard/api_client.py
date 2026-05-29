@@ -102,6 +102,10 @@ class ApiClient:
     def clear_faults(self, machine_id: str) -> dict[str, Any]:
         return self._delete(f"/simulation/fault/{machine_id}")
 
+    def get_scenarios(self) -> dict[str, Any]:
+        """Récupère la liste des scénarios disponibles."""
+        return self._get("/simulation/scenarios")
+
     def change_scenario(self, scenario: str) -> dict[str, Any]:
         return self._put("/simulation/scenario", {"scenario": scenario})
 

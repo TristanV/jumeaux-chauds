@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 
 from api import deps
 from api.models import CommandResponse, FaultInjectCommand, ScenarioChangeCommand
@@ -51,6 +51,22 @@ async def cancel_fault(machine_id: str) -> CommandResponse:
     return CommandResponse(ok=True, message=f"Pannes annulées sur '{machine_id}'.")
 
 
+@router.get("/scenarios")
+async def list_scenarios() -> dict:
+    """Liste les scénarios disponibles."""
+    from pathlib import Path
+
+    scenarios_dir = Path(__file__).parent.parent.parent / "config" / "scenarios"
+    scenarios = []
+    if scenarios_dir.exists():
+        scenarios = sorted(f.stem for f in scenarios_dir.glob("*.yaml") if f.is_file())
+
+    return {
+        "available_scenarios": scenarios if scenarios else ["nominal", "stress"],
+        "count": len(scenarios) if scenarios else 2
+    }
+
+
 @router.put("/scenario", response_model=CommandResponse)
 async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
     """Change le scénario de charge à chaud.
@@ -60,6 +76,7 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
     """
     from config.loader import load_config
     from simulation.scenarios import LoadProfileConfig, ScenarioEngine
+    from omegaconf import OmegaConf
 
     try:
         new_cfg = load_config(scenario=cmd.scenario)
@@ -70,12 +87,24 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
         ) from exc
 
     simulator = deps.get_cluster()
-    lp = new_cfg["simulation"]["load_profile"]
+
+    # Récupération sécurisée de la config simulation
+    lp = OmegaConf.select(new_cfg, "simulation.load_profile")
+    if lp is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Scénario '{cmd.scenario}' ne contient pas 'simulation.load_profile'",
+        )
+
     lp_cfg = LoadProfileConfig(
         type=lp["type"],
         params={k: v for k, v in lp.items() if k != "type"},
     )
     simulator._scenario_engine = ScenarioEngine(profile_cfg=lp_cfg)
+
+    # Mettre à jour le scénario actif dans deps
+    deps._scenario_active = cmd.scenario
+
     logger.info("Scénario changé → '%s'", cmd.scenario)
 
     return CommandResponse(

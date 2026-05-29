@@ -38,6 +38,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cfg = load_config(scenario=scenario)
     logger.info("Config chargée — scénario : %s, cluster : %s", scenario, cfg["cluster"]["id"])
 
+    # Mémoriser le nom du scénario actif
+    deps._scenario_active = scenario
+
     # --- WebSocket manager -----------------------------------------------
     ws_manager = ConnectionManager()
     deps._ws_manager = ws_manager
@@ -125,8 +128,7 @@ app.include_router(ws_router, tags=["websocket"])
 async def root() -> dict:
     """Informations générales sur l'API et l'état du simulateur."""
     simulator: ClusterSimulator = deps.get_cluster()
-    cfg = deps.get_config()
-    scenario = cfg.get("simulation", {}).get("load_profile", {}).get("type", "unknown")
+    scenario = deps.get_scenario_active()
     return {
         "name": "Jumeaux Chauds API",
         "version": APP_VERSION,

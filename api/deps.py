@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 _simulator: "ClusterSimulator | None" = None
 _ws_manager: "ConnectionManager | None" = None
 _config: dict | None = None
+_scenario_active: str = "nominal"  # Scénario chargé au démarrage
 
 
 def get_cluster() -> "ClusterSimulator":
@@ -43,3 +44,8 @@ def get_config() -> dict:
         raise RuntimeError("Config non initialisée — lifespan non démarré.")
     from omegaconf import OmegaConf
     return OmegaConf.to_container(_config, resolve=True)  # type: ignore[return-value]
+
+
+def get_scenario_active() -> str:
+    """Retourne le nom du scénario actuellement actif."""
+    return _scenario_active

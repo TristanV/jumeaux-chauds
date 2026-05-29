@@ -1,134 +1,30 @@
-# Busy Weeks Scenario — Cycles jour/semaine réalistes
-#
-# Paramètres :
-# - Lundi-vendredi : heures creuses/rush hours programmées
-# - Samedi-dimanche : charge minimale (maintenance seulement)
-# - Anomalies hebdomadales : lundi spike, vendredi drop
-#
-# Cas d'usage : Valider auto-scaling, dimensionner pour pics réalistes,
-#              analyser cycles énergétiques hebdomadaires
+simulation:
+  mode: "busy_weeks"
+  tick_rate_hz: 10.0
+  events_per_sec: 1.0
+  duration: "0"
 
-scenario:
-  name: "busy_weeks"
-  description: "Realistic workload with weekly cycles, rush hours, and weekends"
-  duration_s: 604800.0  # 7 jours (1 semaine complète)
+  load_profile:
+    type: "sine_wave"
+    base_load: 0.50
+    amplitude: 0.35
+    period_s: 1200.0
 
-# Cycle semaine (en secondes à partir du dimanche 00:00)
-# week_cycle_s sera calculé comme 7 * 24 * 3600 = 604800s
-week_configuration:
-  cycle_duration_s: 604800.0
-  start_day: 0  # 0 = dimanche, 1 = lundi, ...
-
-# Lundi-Vendredi (jours de travail)
-weekday_profile:
-  # Heures creuses (00:00-07:00)
-  off_peak:
-    hours: [0, 1, 2, 3, 4, 5, 6, 7]
-    load_factor: 0.1
-    description: "Services background"
-
-  # Montée progressive (07:00-09:00)
-  ramp_up:
-    start_hour: 7
-    end_hour: 9
-    load_start: 0.1
-    load_end: 0.6
-    description: "Morning startup"
-
-  # Rush hour matin (09:00-12:00)
-  morning_rush:
-    hours: [9, 10, 11, 12]
-    load_factor: 0.75
-    description: "Peak morning traffic"
-
-  # Pause midi (12:00-14:00)
-  midday_break:
-    hours: [12, 13, 14]
-    load_factor: 0.4
-    description: "Lunch break"
-
-  # Rush hour après-midi (14:00-18:00)
-  afternoon_rush:
-    hours: [14, 15, 16, 17, 18]
-    load_factor: 0.8
-    description: "Peak afternoon traffic"
-
-  # Décroissance (18:00-20:00)
-  ramp_down:
-    start_hour: 18
-    end_hour: 20
-    load_start: 0.8
-    load_end: 0.2
-    description: "End of day wind-down"
-
-  # Nuit (20:00-23:59)
-  night:
-    hours: [20, 21, 22, 23]
-    load_factor: 0.15
-    description: "Night services"
-
-# Samedi-Dimanche (weekend) : repos
-weekend_profile:
-  load_factor: 0.05
-  description: "Minimal load, maintenance only"
-
-# Anomalies hebdomadales (événements ponctuels)
-anomalies:
-  # Lundi 9h : pic de charge (rattrapage du weekend)
-  monday_spike:
+  noise:
     enabled: true
-    day: 1  # lundi
-    hour: 9
-    load_factor: 0.95
-    duration_minutes: 30
-    reason: "Post-weekend catch-up"
+    temperature_std_c: 0.4
+    spike_probability: 0.003
+    spike_magnitude_c: 2.5
+    drift:
+      enabled: false
+      rate_c_per_s: 0.0
 
-  # Vendredi après 16h : baisse de charge (départ anticipé)
-  friday_evening_drop:
+  fault_injection:
     enabled: true
-    day: 5  # vendredi
-    start_hour: 16
-    end_hour: 20
-    load_factor: 0.3
-    reason: "Friday early departure"
-
-  # Mercredi maintenance window (optionnel)
-  wednesday_maintenance:
-    enabled: false
-    day: 3  # mercredi
-    start_hour: 2
-    end_hour: 4
-    load_factor: 0.0
-    reason: "Weekly maintenance window"
-
-# Faults — pannes standard (pas d'accélération spéciale)
-faults:
-  enabled: true
-  base_rate: 0.0005  # Pannes plus rares en conditions normales
-
-  distributions:
-    - type: "weibull"
-      weight: 0.5
-      shape: 1.5
-      scale: 7200.0  # Moyenne 2h entre pannes
-      fault_types: ["cpu_throttle", "memory_error"]
-
-    - type: "exponential"
-      weight: 0.5
-      mean_s: 3600.0
-      fault_types: ["fan_degraded", "psu_dropout"]
-
-# Notes pour monitoring/analytics
-notes: |
-  Scénario réaliste de charge réseau hebdomadaire.
-  Permet d'observer :
-  - Cycles de charge jour/nuit
-  - Pics rush hours (9-12h, 14-18h)
-  - Variation entre weekday et weekend
-  - Anomalies ponctuelles (lundi spike, vendredi drop)
-
-  Cas d'usage :
-  - Valider auto-scaling policies
-  - Dimensionner UPS pour rush hours
-  - Optimizer batch jobs sur weekend
-  - Analyser coût électrique par jour/heure
+    faults:
+      - type: "power_surge"
+        distribution: "exponential"
+        scale_s: 7200.0
+        probability_per_tick: 0.0001
+        magnitude: 1.2
+    recovery_delay_s: 90.0

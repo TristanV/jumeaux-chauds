@@ -26,11 +26,13 @@ class ClusterWSClient:
     La reconnexion est automatique avec backoff exponentiel (1 s → 16 s max).
     """
 
-    def __init__(self, url: str = "ws://localhost:8000/ws/cluster") -> None:
+    def __init__(self, url: str = "ws://localhost:8000/ws/cluster", initial_timeout_s: float = 5.0) -> None:
         self.url = url
         self.latest: dict[str, Any] | None = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
+        self._connection_ready_event = threading.Event()
+        self._initial_timeout = initial_timeout_s
         self._thread = threading.Thread(target=self._run, daemon=True, name="ws-client")
         self._thread.start()
 
@@ -56,11 +58,15 @@ class ClusterWSClient:
 
     async def _listen_loop(self) -> None:
         backoff = 1.0
+        first_connection = True
         while not self._stop_event.is_set():
             try:
                 async with websockets.connect(self.url, ping_interval=20) as ws:
                     backoff = 1.0  # reset on successful connect
                     logger.info("WebSocket connecté : %s", self.url)
+                    if first_connection:
+                        self._connection_ready_event.set()
+                        first_connection = False
                     async for raw in ws:
                         if self._stop_event.is_set():
                             break
