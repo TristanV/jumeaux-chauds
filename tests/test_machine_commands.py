@@ -88,25 +88,27 @@ class TestFanSpeedEffectOnTemperature:
 
         machine.power_on()
 
-        # Phase 1 : fans lents (auto mode, charge basse)
+        # Phase 1 : fans lents (manuel, vitesse basse fixe), attendre équilibre thermique
+        machine.set_fan_speed(0, 1000)
+        machine.set_fan_speed(1, 1000)
         temps_slow = []
-        for _ in range(50):
-            machine.tick(load_factor=0.7, dt=0.1)
+        for _ in range(100):  # Plus long pour équilibre
+            machine.tick(load_factor=0.95, dt=0.1)
             temps_slow.append(machine.snapshot()["temperature_c"])
 
-        temp_slow_avg = np.mean(temps_slow[-10:])
+        temp_slow_avg = np.mean(temps_slow[-20:])  # Moyennes sur plus de points
 
         # Phase 2 : augmenter la vitesse des fans manuellement
         machine.set_fan_speed(0, 4500)
         machine.set_fan_speed(1, 4500)
 
-        # Phase 3 : même charge, mais fans rapides
+        # Phase 3 : même charge HAUTE, mais fans rapides, attendre équilibre
         temps_fast = []
-        for _ in range(50):
-            machine.tick(load_factor=0.7, dt=0.1)
+        for _ in range(100):  # Plus long pour équilibre
+            machine.tick(load_factor=0.95, dt=0.1)
             temps_fast.append(machine.snapshot()["temperature_c"])
 
-        temp_fast_avg = np.mean(temps_fast[-10:])
+        temp_fast_avg = np.mean(temps_fast[-20:])
 
         # Température avec fans rapides < température avec fans lents
         assert temp_fast_avg < temp_slow_avg, \

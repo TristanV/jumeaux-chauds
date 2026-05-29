@@ -293,14 +293,14 @@ class TestPowerValues:
         machine.power_on()
 
         # Fan OFF
-        machine.fans[0].rpm = 0
-        machine.fans[1].rpm = 0
+        machine.set_fan_speed(0, 0)
+        machine.set_fan_speed(1, 0)
         machine.tick(load_factor=0.5, dt=0.1)
         power_no_fans = machine.snapshot()["power_w"]
 
         # Fan ON (high speed)
-        machine.fans[0].rpm = 5000
-        machine.fans[1].rpm = 5000
+        machine.set_fan_speed(0, 5000)
+        machine.set_fan_speed(1, 5000)
         machine.tick(load_factor=0.5, dt=0.1)
         power_with_fans = machine.snapshot()["power_w"]
 
