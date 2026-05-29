@@ -4,6 +4,11 @@ Endpoints (Phase 4.4) :
   POST   /simulation/fault                → injecte une panne sur une machine
   DELETE /simulation/fault/{machine_id}   → annule toutes les pannes d'une machine
   PUT    /simulation/scenario             → change le scénario de charge à chaud
+
+Endpoints (Phase 8.4) :
+  GET    /simulation/speed                → infos vitesse de simulation
+  PUT    /simulation/speed                → change la vitesse
+  POST   /simulation/speed/reset          → réinitialise temps + énergie
 """
 from __future__ import annotations
 
@@ -110,4 +115,103 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
     return CommandResponse(
         ok=True,
         message=f"Scénario changé vers '{cmd.scenario}' (profil: {lp['type']}).",
+    )
+
+
+# ------------------------------------------------------------------
+# Phase 8.4 — Contrôle de vitesse de simulation
+# ------------------------------------------------------------------
+
+
+@router.get("/speed")
+async def get_speed_info() -> dict:
+    """Retourne les infos complètes sur la vitesse de simulation.
+
+    Returns:
+        dict avec speed_multiplier, speed_name, cpu_throttle_enabled, etc.
+    """
+    simulator = deps.get_cluster()
+    return simulator.get_speed_info()
+
+
+class SpeedChangeRequest(dict):
+    """Schéma pour changement de vitesse."""
+
+    def __init__(self, speed_multiplier: float | None = None, speed_name: str | None = None):
+        """
+        Args:
+            speed_multiplier: Multiplier numérique (ex: 3600.0)
+            speed_name: Nom prédéfini (ex: "1 hour/sec")
+        """
+        super().__init__()
+        self["speed_multiplier"] = speed_multiplier
+        self["speed_name"] = speed_name
+
+
+@router.put("/speed", response_model=CommandResponse)
+async def change_speed(
+    speed_multiplier: float | None = None,
+    speed_name: str | None = None,
+) -> CommandResponse:
+    """Change la vitesse de simulation à chaud.
+
+    Args:
+        speed_multiplier: Multiplier (1.0, 60.0, 3600.0, 86400.0, ou autre)
+        speed_name: Nom prédéfini (alternative à multiplier)
+
+    Returns:
+        CommandResponse avec confirmation du changement
+    """
+    simulator = deps.get_cluster()
+
+    # Convertir speed_name en multiplier si fourni
+    if speed_name:
+        speed_map = {
+            "Real-time (1 sec/sec)": 1.0,
+            "1 min/sec": 60.0,
+            "1 hour/sec": 3600.0,
+            "1 day/sec": 86400.0,
+        }
+        if speed_name not in speed_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"speed_name '{speed_name}' invalide. "
+                f"Valeurs : {list(speed_map.keys())}",
+            )
+        speed_multiplier = speed_map[speed_name]
+    elif speed_multiplier is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Fournir 'speed_multiplier' ou 'speed_name'",
+        )
+
+    try:
+        simulator.set_speed_multiplier(speed_multiplier)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return CommandResponse(
+        ok=True,
+        message=(
+            f"Vitesse changée à {speed_multiplier}x "
+            f"({simulator.get_speed_name(speed_multiplier)})"
+        ),
+    )
+
+
+@router.post("/speed/reset", response_model=CommandResponse)
+async def reset_time_and_energy() -> CommandResponse:
+    """Réinitialise le temps écoulé et l'énergie accumulée.
+
+    Utile après une longue simulation pour recommencer une nouvelle expérience.
+
+    Returns:
+        CommandResponse avec confirmation
+    """
+    simulator = deps.get_cluster()
+    simulator.reset_time_and_energy()
+
+    return CommandResponse(
+        ok=True,
+        message="Temps écoulé et énergie réinitialisés",
     )

@@ -89,6 +89,37 @@ class ClusterSimulator:
             recovery_delay_s=float(fault_section.get("recovery_delay_s", 60.0)),
         )
 
+        # Phase 8.4 — Contrôle de vitesse de simulation
+        self._speed_multiplier: float = float(
+            config["simulation"].get("speed_multiplier", 1.0)
+        )
+        if self._speed_multiplier <= 0:
+            raise ValueError(
+                f"speed_multiplier must be > 0, got {self._speed_multiplier}"
+            )
+
+        self._cpu_throttle_enabled: bool = config["simulation"].get(
+            "cpu_throttle_enabled", True
+        )
+        self._cpu_throttle_target_hz: float = float(
+            config["simulation"].get("cpu_throttle_target_hz", 100.0)
+        )
+        if not (50.0 <= self._cpu_throttle_target_hz <= 500.0):
+            logger.warning(
+                f"cpu_throttle_target_hz {self._cpu_throttle_target_hz} "
+                "outside recommended range [50, 500]"
+            )
+
+        # Intervalle throttle (en secondes réelles)
+        if self._cpu_throttle_enabled:
+            self._throttle_interval_s: float = 1.0 / self._cpu_throttle_target_hz
+        else:
+            self._throttle_interval_s: float = 0.0
+
+        # Buffer circulaire pour export données ML
+        from collections import deque
+        self._snapshot_buffer = deque(maxlen=100000)
+
         # Temps et métriques agrégées
         self._running = False
         self._t_elapsed_s: float = 0.0
@@ -342,7 +373,8 @@ class ClusterSimulator:
         # Mise à jour des métriques agrégées
         self._update_metrics()
 
-        self._t_elapsed_s += dt
+        # Phase 8.4 — Appliquer speed_multiplier à l'accumulation du temps
+        self._t_elapsed_s += dt * self._speed_multiplier
 
     # ------------------------------------------------------------------
     # Métriques & snapshot
@@ -374,3 +406,172 @@ class ClusterSimulator:
             },
             "machines": {mid: m.snapshot() for mid, m in self.machines.items()},
         }
+
+    # ------------------------------------------------------------------
+    # Phase 8.4 — Contrôle de vitesse de simulation
+    # ------------------------------------------------------------------
+
+    def set_speed_multiplier(self, multiplier: float) -> None:
+        """Change la vitesse de simulation à chaud.
+
+        Args:
+            multiplier: Multiplicateur de vitesse (doit être > 0)
+                       1.0 = real-time
+                       60.0 = 1 min/sec
+                       3600.0 = 1 hour/sec
+                       86400.0 = 1 day/sec
+
+        Raises:
+            ValueError: Si multiplier <= 0
+        """
+        if multiplier <= 0:
+            raise ValueError(
+                f"speed_multiplier must be > 0, got {multiplier}"
+            )
+
+        old_multiplier = self._speed_multiplier
+        self._speed_multiplier = multiplier
+
+        logger.info(
+            f"Speed multiplier changed from {old_multiplier}x to {multiplier}x "
+            f"({self.get_speed_name(multiplier)})"
+        )
+
+    def get_speed_multiplier(self) -> float:
+        """Retourne le multiplier de vitesse actuel."""
+        return self._speed_multiplier
+
+    def get_speed_info(self) -> dict[str, Any]:
+        """Retourne les informations complètes sur la vitesse de simulation.
+
+        Returns:
+            dict avec :
+            - speed_multiplier: multiplier actuel
+            - speed_name: nom lisible (ex: "1 hour/sec")
+            - cpu_throttle_enabled: true si throttle activé
+            - cpu_throttle_target_hz: fréquence cible réelle
+            - real_tick_rate_hz: fréquence réelle de ticks
+            - simulated_tick_rate_hz: fréquence simulée de ticks
+        """
+        real_tick_hz = (
+            self._cpu_throttle_target_hz
+            if self._cpu_throttle_enabled
+            else self._tick_rate_hz
+        )
+        simulated_tick_hz = real_tick_hz * self._speed_multiplier
+
+        return {
+            "speed_multiplier": self._speed_multiplier,
+            "speed_name": self.get_speed_name(self._speed_multiplier),
+            "cpu_throttle_enabled": self._cpu_throttle_enabled,
+            "cpu_throttle_target_hz": self._cpu_throttle_target_hz,
+            "real_tick_rate_hz": real_tick_hz,
+            "simulated_tick_rate_hz": simulated_tick_hz,
+            "elapsed_time_s": self._t_elapsed_s,
+            "elapsed_time_formatted": self._format_duration(self._t_elapsed_s),
+        }
+
+    def set_cpu_throttle(
+        self, enabled: bool, target_hz: float | None = None
+    ) -> None:
+        """Configure le throttling CPU.
+
+        Args:
+            enabled: True pour activer throttle
+            target_hz: Fréquence cible (50-500 Hz), ignoré si enabled=False
+        """
+        self._cpu_throttle_enabled = enabled
+
+        if enabled and target_hz is not None:
+            if not (50.0 <= target_hz <= 500.0):
+                logger.warning(
+                    f"cpu_throttle_target_hz {target_hz} outside "
+                    "recommended range [50, 500]"
+                )
+            self._cpu_throttle_target_hz = target_hz
+            self._throttle_interval_s = 1.0 / target_hz
+        elif enabled:
+            self._throttle_interval_s = 1.0 / self._cpu_throttle_target_hz
+
+        logger.info(
+            f"CPU throttle {'enabled' if enabled else 'disabled'}"
+            + (f" (target: {target_hz} Hz)" if enabled and target_hz else "")
+        )
+
+    def reset_time_and_energy(self) -> None:
+        """Réinitialise le temps écoulé et l'énergie accumulée.
+
+        Utile pour recommencer une expérience après une longue simulation.
+        """
+        self._t_elapsed_s = 0.0
+        self.energy_kwh_total = 0.0
+        self.cost_eur_total = 0.0
+
+        for machine in self.machines.values():
+            machine.energy_kwh_cumulated = 0.0
+
+        logger.info("Time and energy metrics reset")
+
+    def get_snapshot_buffer_info(self) -> dict[str, Any]:
+        """Retourne des infos sur le buffer de snapshots pour export ML.
+
+        Returns:
+            dict avec :
+            - buffer_size: nombre de snapshots en buffer
+            - buffer_maxlen: taille max du buffer
+            - estimated_size_gb: estimation de taille si exportés
+        """
+        snapshot_count = len(self._snapshot_buffer)
+        estimated_size_bytes = snapshot_count * 5000  # ~5 KB par snapshot
+        estimated_size_gb = estimated_size_bytes / (1024**3)
+
+        return {
+            "buffer_size": snapshot_count,
+            "buffer_maxlen": self._snapshot_buffer.maxlen,
+            "estimated_size_gb": round(estimated_size_gb, 2),
+            "estimated_size_mb": round(estimated_size_bytes / (1024**2), 2),
+        }
+
+    @staticmethod
+    def get_speed_name(multiplier: float) -> str:
+        """Retourne un nom lisible pour le multiplier."""
+        if multiplier == 1.0:
+            return "Real-time (1 sec/sec)"
+        elif multiplier == 60.0:
+            return "1 min/sec"
+        elif multiplier == 3600.0:
+            return "1 hour/sec"
+        elif multiplier == 86400.0:
+            return "1 day/sec"
+        else:
+            return f"{multiplier:.1f}x"
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        """Formate une durée en secondes en chaîne lisible.
+
+        Ex: 3661.5 → "1h 1m 1s"
+        """
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+
+        days = int(seconds // 86400)
+        remaining = seconds % 86400
+
+        hours = int(remaining // 3600)
+        remaining = remaining % 3600
+
+        minutes = int(remaining // 60)
+        secs = remaining % 60
+
+        parts = []
+        if days > 0:
+            parts.append(f"{days}d")
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+        if secs > 0 or not parts:
+            parts.append(f"{secs:.0f}s")
+
+        return " ".join(parts)

@@ -342,6 +342,81 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
 def tab_simulation(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     machines = list(snapshot.get("machines", {}).keys()) if snapshot else []
 
+    # Phase 8.4 — Contrôle de vitesse de simulation
+    st.subheader("⚙️ Contrôle de vitesse de simulation")
+
+    try:
+        speed_info = api._get("/simulation/speed")
+        current_speed = speed_info.get("speed_multiplier", 1.0)
+        current_speed_name = speed_info.get("speed_name", "Real-time")
+    except Exception:
+        current_speed = 1.0
+        current_speed_name = "Real-time"
+
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        # Sélecteur de vitesse prédéfinie
+        speed_options = {
+            "Real-time (1x)": 1.0,
+            "1 min/sec (60x)": 60.0,
+            "1 hour/sec (3600x)": 3600.0,
+            "1 day/sec (86400x)": 86400.0,
+            "Personnalisé": None,
+        }
+        selected_speed_name = st.selectbox(
+            "Sélectionner vitesse",
+            list(speed_options.keys()),
+            index=0,
+            key="speed_select"
+        )
+
+        if speed_options[selected_speed_name] is None:
+            # Mode personnalisé
+            custom_speed = st.number_input(
+                "Multiplier personnalisé",
+                min_value=0.1,
+                max_value=1000000.0,
+                value=current_speed,
+                step=1.0,
+                key="custom_speed"
+            )
+            speed_to_apply = custom_speed
+        else:
+            speed_to_apply = speed_options[selected_speed_name]
+
+    with col2:
+        st.write("")
+        st.write("")
+        if st.button("✓ Appliquer vitesse", key="btn_apply_speed"):
+            try:
+                res = api._put("/simulation/speed", {"speed_multiplier": speed_to_apply})
+                if "ok" in res and res["ok"]:
+                    log_event(f"Vitesse changée → {speed_to_apply}x")
+                    st.success(f"✅ Vitesse appliquée : **{speed_to_apply}x**")
+                else:
+                    st.error(f"❌ Erreur : {res.get('message', 'Erreur inconnue')}")
+            except Exception as e:
+                st.error(f"❌ Erreur API : {e}")
+
+    with col3:
+        st.write("")
+        st.write("")
+        if st.button("🔄 Reset temps", key="btn_reset_time"):
+            try:
+                res = api._post("/simulation/speed/reset", {})
+                if "ok" in res and res["ok"]:
+                    log_event("Temps et énergie réinitialisés")
+                    st.success("✅ Temps et énergie réinitialisés")
+                else:
+                    st.error(f"❌ Erreur : {res.get('message', 'Erreur inconnue')}")
+            except Exception as e:
+                st.error(f"❌ Erreur API : {e}")
+
+    # Afficher infos vitesse actuelle
+    st.info(f"**Vitesse courante :** {current_speed_name} ({current_speed}x)")
+
+    st.divider()
     st.subheader("🎬 Scénario actif")
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -468,20 +543,32 @@ def main() -> None:
             st.warning(f"⚠️ Impossible de récupérer l'état initial : {e}")
             snapshot = None
 
-    # Récupérer le scénario actif depuis l'API
+    # Récupérer le scénario actif et la vitesse de simulation depuis l'API
     try:
         api_info = api._get("/")  # Appel direct pour obtenir les infos générales
         scenario_active = api_info.get("scenario_active", "unknown")
     except Exception:
         scenario_active = "unknown"
 
-    # En-tête avec scénario actif
-    col1, col2 = st.columns([3, 1])
+    try:
+        speed_info = api._get("/simulation/speed")
+        speed_multiplier = speed_info.get("speed_multiplier", 1.0)
+        speed_name = speed_info.get("speed_name", "Real-time")
+    except Exception:
+        speed_multiplier = 1.0
+        speed_name = "Real-time"
+
+    # En-tête avec scénario actif et vitesse de simulation
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("🌡️ Jumeaux Chauds — Digital Twin")
     with col2:
+        st.markdown(f"<div style='text-align: center; padding-top: 12px;'>"
+                   f"<b>Scénario :</b><br/><code>{scenario_active}</code>"
+                   f"</div>", unsafe_allow_html=True)
+    with col3:
         st.markdown(f"<div style='text-align: right; padding-top: 12px;'>"
-                   f"<b>Scénario actif :</b><br/><code>{scenario_active}</code>"
+                   f"<b>Vitesse :</b><br/><code>{speed_name}</code>"
                    f"</div>", unsafe_allow_html=True)
 
     render_sidebar(snapshot)

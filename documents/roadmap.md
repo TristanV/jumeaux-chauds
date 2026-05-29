@@ -45,9 +45,16 @@ Phase 6 : Déploiement Docker
 
 Phase 7 : Tests
   ├── Étape 7.1 : Couverture et tests unitaires consolidés
-  └── Étape 7.2 : Tests d'intégration
+  ├── Étape 7.2 : Corrections du modèle physique
+  ├── Étape 7.3 : Tests API FastAPI
+  ├── Étape 7.4 : Tests MQTT e2e
+  └── Étape 7.5 : Tests TimescaleDB consumer
 
 Phase 8 : Extensions pédagogiques (⭐ prioritaires)
+  ├── Étape 8.1 : Scénarios avancés + MQTT Observer
+  ├── Étape 8.2 : Régulateur PID configurable
+  ├── Étape 8.3 : Coût électrique mensuel
+  └── Étape 8.4 : Contrôle de vitesse de simulation (🔥 ML Data Gen)
 ```
 
 ### Statut global
@@ -518,6 +525,82 @@ python scripts/mqtt_observer.py -v
 - ✅ Deux fichiers YAML chargent sans erreur
 - ✅ Scenarii génèrent charge cohérente sur 24h (heatwave) et 7j (busy_weeks)
 - ✅ Observer MQTT se connecte, affiche messages JSON formatés
+
+---
+
+### Étape 8.4 — Contrôle de vitesse de simulation (🔥 ML Data Gen) ⭐⭐⭐ (À faire)
+
+**Objectif :** Permettre d'accélérer la simulation pour générer de grandes quantités de données ML rapidement, en évitant la surchauffe CPU.
+
+**Cas d'usage principal :** Entraîner des modèles ML de maintenance prédictive sur des mois/années de données en quelques secondes.
+
+**Tâches :**
+- [ ] Ajouter paramètre `simulation.speed_multiplier` en YAML (1.0, 60.0, 3600.0, 86400.0)
+- [ ] Implémenter CPU throttling pour limiter fréquence réelle publication (50-500 Hz configurable)
+- [ ] Modifier boucle `ClusterSimulator.run()` :
+  - Appliquer multiplier à `_t_elapsed_s` chaque tick
+  - Throttler MQTT/WebSocket selon CPU throttle, pas les ticks
+  - Ajouter méthode `set_speed_multiplier()` pour changement à chaud
+- [ ] Ajouter endpoints API :
+  - `GET /simulation/speed` → infos vitesse actuelle + throttle
+  - `PUT /simulation/speed` → changer vitesse (accepte multiplier ou preset name)
+  - `POST /simulation/speed/reset` → reset temps écoulé + énergie
+- [ ] Intégrer dashboard Streamlit :
+  - Dropdown vitesses prédéfinies (Real-time, 1 min/sec, 1 hour/sec, 1 day/sec)
+  - Custom speed input
+  - Toggle CPU Throttle + slider target Hz
+  - Afficher : temps simulé, snapshots générés, taille estimée données
+  - Boutons : Export CSV, Reset Time
+- [ ] Implémenter buffer circulaire snapshots (100K max) + export CSV/Parquet
+- [ ] Tests (15+ tests) :
+  - Changement vitesse à chaud
+  - Accumulation temps simulé cohérente
+  - CPU throttle fonctionne (fréquence réelle <= target)
+  - Export données valide
+
+**Schéma de changement :**
+
+```yaml
+# config/base.yaml (nouveau)
+simulation:
+  speed_multiplier: 1.0              # défaut : real-time
+  cpu_throttle_enabled: true
+  cpu_throttle_target_hz: 100.0      # ~100 ticks/s réels max
+```
+
+**API endpoints :**
+
+```
+GET /simulation/speed
+→ {
+  "speed_multiplier": 3600.0,
+  "speed_name": "1 hour/sec",
+  "cpu_throttle_enabled": true,
+  "cpu_throttle_target_hz": 100.0
+}
+
+PUT /simulation/speed
+← { "speed_multiplier": 86400.0 }  or  { "speed_name": "1 day/sec" }
+→ { "speed_multiplier": 86400.0, "speed_name": "1 day/sec", "message": "..." }
+```
+
+**Impact sur données :**
+
+| Multiplier | Temps pour 30j | Snapshots | Taille (brute) | Utilisation |
+|-----------|----------------|-----------|----------------|------------|
+| 1.0 (real-time) | 30 jours | 2.592M | 13 GB | Monitoring |
+| 60.0 (1 min/sec) | 12 heures | 2.592M | 13 GB | Tests rapides |
+| 3600.0 (1 hour/sec) | 12 minutes | 2.592M | 13 GB | Prototypage ML |
+| 86400.0 (1 day/sec) | 30 secondes | 2.592M | 13 GB | **Production ML** ✅ |
+
+**Documentation :** Fichier `documents/SPECS_SIMULATION_SPEED_MULTIPLIER.md` (détails complets)
+
+**Critère d'acceptation :**
+- ✅ Vitesse change à chaud sans redémarrage
+- ✅ Temps écoulé accumulé correctement
+- ✅ CPU throttle limite fréquence (mesurable : `dt` entre publications)
+- ✅ Export CSV contient N snapshots avec colonnes (timestamp, machine_id, temp, power, status)
+- ✅ 15+ tests passent
 
 ---
 

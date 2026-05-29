@@ -4,6 +4,15 @@ simulation:
   events_per_sec: 1.0
   duration: "0"                      # "0" = infini ; "1h30m" = durée finie
 
+  # Phase 8.4 — Contrôle de vitesse de simulation (ML data generation)
+  speed_multiplier: 1.0              # défaut : real-time (1s/s)
+                                     # 60.0 = 1 min/sec
+                                     # 3600.0 = 1 hour/sec
+                                     # 86400.0 = 1 day/sec
+
+  cpu_throttle_enabled: true         # limiter fréquence réelle de publication
+  cpu_throttle_target_hz: 100.0      # ~100 ticks réels/s max (50-500 Hz possible)
+
   load_profile:
     type: "sine_wave"
     base_load: 0.35
