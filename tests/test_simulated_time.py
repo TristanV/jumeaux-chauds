@@ -162,7 +162,7 @@ class TestClusterSnapshotTimestamp:
         snap2 = simulator.get_snapshot()
 
         # Elapsed devrait être 60 secondes
-        assert abs(snapshot["t_elapsed_s"] - 60.0) < 1.0
+        assert abs(snap2["t_elapsed_s"] - 60.0) < 1.0
 
 
 class TestMqttPublisherTimestamps:
@@ -251,8 +251,9 @@ class TestScenarioChaining:
         # Vérifier que start_time est identique (protégé par loader)
         config1 = load_config(scenario="nominal")
         assert config1["simulation"]["start_time"] == config2["simulation"]["start_time"]
-        # Et que le simulator a bien parsé cette valeur
-        assert config2["simulation"]["start_time"] == sim1._start_time.isoformat()
+        # Et que le simulator a bien parsé cette valeur (comparer datetime objects, pas strings)
+        from simulation.time import parse_start_time
+        assert parse_start_time(config2["simulation"]["start_time"]) == sim1._start_time
 
         # Le temps écoulé est personnel au simulator, pas à la config
         # Donc il continue où il s'est arrêté (10 ticks = 1 sec)
@@ -321,7 +322,7 @@ class TestStartTimeModification:
         t_elapsed_before = sim._t_elapsed_s
         old_start_time = sim._start_time
 
-        # Changer start_time
+        # Changer start_time à une première valeur
         from simulation.time import parse_start_time
         new_start_time = parse_start_time("2010-06-15T12:30:45Z")
         sim._start_time = new_start_time
@@ -329,17 +330,20 @@ class TestStartTimeModification:
         # Vérifier t_elapsed_s inchangé
         assert sim._t_elapsed_s == t_elapsed_before
 
-        # Snapshot avant et après doivent avoir timestamps différents
+        # Snapshot AVANT changement de start_time
         snap_before = sim.get_snapshot()
         ts_before = snap_before["ts"]
 
-        sim._start_time = new_start_time
+        # Changer start_time À UNE AUTRE VALEUR (différente de la précédente)
+        different_start_time = parse_start_time("2015-12-25T18:45:30Z")
+        sim._start_time = different_start_time
 
+        # Snapshot APRÈS changement de start_time
         snap_after = sim.get_snapshot()
         ts_after = snap_after["ts"]
 
-        # Les timestamps changent quand start_time change
-        assert ts_before != ts_after
+        # Les timestamps DOIVENT être différents car start_time a changé
+        assert ts_before != ts_after, f"Expected different timestamps: {ts_before} vs {ts_after}"
         # Mais le temps écoulé persiste
         assert snap_after["t_elapsed_s"] == snap_before["t_elapsed_s"]
 

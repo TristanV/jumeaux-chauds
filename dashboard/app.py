@@ -284,7 +284,24 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
 
     buf = list(st.session_state.temp_buffers[selected])
     if len(buf) > 1:
-        st.line_chart({"temp_c": buf}, height=180, use_container_width=True)
+        # Utiliser plotly au lieu de st.line_chart() pour éviter erreur "Unrecognized data set"
+        # lors des changements de vitesse de simulation
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            y=buf,
+            mode='lines',
+            name='Température CPU (°C)',
+            line=dict(color='#1f77b4', width=2),
+        ))
+        fig.update_layout(
+            title=None,
+            height=180,
+            margin=dict(l=40, r=20, t=20, b=40),
+            hovermode='x unified',
+            xaxis_title="Temps (ticks)",
+            yaxis_title="Température (°C)",
+        )
+        st.plotly_chart(fig, use_container_width=True, key=f"temp_chart_{selected}")
 
     if sensors:
         st.subheader("🌡️ Sondes thermiques")

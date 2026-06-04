@@ -287,8 +287,8 @@ class TestNominalVsStressLoadProfile:
 
     def test_nominal_lower_load_than_stress(self) -> None:
         """Vérifie que le profil nominal consomme moins en moyenne."""
-        # Nominal : sine_wave, base=0.35, amplitude=0.20
-        # Stress : ramp, base=0.20→0.95
+        # Nominal : sine_wave, base=0.35, amplitude=0.20 → moyenne ~0.35
+        # Stress : ramp, base=0.20→0.95 over 600s → après 6000 ticks (600s), charge moyenne ~0.57
 
         cfg_nominal = load_config("nominal")
         sim_nominal = ClusterSimulator(cfg_nominal)
@@ -301,15 +301,15 @@ class TestNominalVsStressLoadProfile:
         for m in sim_stress.machines.values():
             m.power_on()
 
-        # 600 ticks chacun (60 secondes, temps pour stress de ramper à 0.95)
-        for _ in range(600):
+        # 6000 ticks chacun (600 secondes, temps complet pour stress de ramper à 0.95)
+        for _ in range(6000):
             sim_nominal._tick()
             sim_stress._tick()
 
         energy_nominal = sim_nominal.energy_kwh_total
         energy_stress = sim_stress.energy_kwh_total
 
-        # Stress consomme plus (charge globalement plus élevée)
+        # Stress consomme plus (charge globalement plus élevée, moyenne 0.57 vs 0.35)
         assert energy_stress > energy_nominal
 
 

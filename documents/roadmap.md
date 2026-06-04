@@ -70,6 +70,15 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
   - [x] 8.1 — Scénarios avancés + MQTT Observer ✅ (26-28 mai 2026)
   - [x] 8.4 — Contrôle de vitesse de simulation ✅ (29 mai 2026)
   - [x] 8.5 — Bug fixes (pannes, speed multiplier) ✅ (3-4 juin 2026)
+  - [x] 8.6 — Bug fixes (Tests + Config) ✅ (4 juin 2026) — **317/317 tests, 0 warnings**
+    - [x] 8.6.1 — Fix stress.yaml (fault_injection, ramp_duration)
+    - [x] 8.6.2 — Fix test_snapshot_with_speed_multiplier (NameError)
+    - [x] 8.6.3 — Fix ISO format timestamp comparison
+    - [x] 8.6.4 — Fix start_time modification test logic
+    - [x] 8.6.5 — Fix test_nominal_lower_load_than_stress (durée insuffisante)
+    - [x] 8.6.6 — Fix test_change_start_time_preserves_elapsed (timestamps identiques)
+    - [x] 8.6.7 — Fix pytest warnings (asyncio_default_fixture_loop_scope, aiomqtt filter)
+    - [x] 8.6.8 — Validation complète (317/317 tests passants, 0 warnings) ✅
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
