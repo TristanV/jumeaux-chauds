@@ -23,11 +23,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 import aiomqtt
+from simulation.time import get_simulated_time_iso
 
 logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
+    """Timestamp heure réelle (déprécié, utilisé pour fallback seulement)."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
@@ -141,13 +143,16 @@ class MqttPublisher:
     async def publish_telemetry(self, snapshot: dict) -> None:
         """Publie le snapshot complet d'une machine (QoS 0).
 
-        ``snapshot`` est le dict retourné par ``MachineSimulator.snapshot()``.
+        ``snapshot`` est le dict retourné par ``ClusterSimulator.get_snapshot()``.
+        Utilise le timestamp simulé du snapshot (pas l'heure réelle).
         """
         cluster_id = snapshot["cluster_id"]
         machine_id = snapshot["machine_id"]
+        # Utiliser le ts du snapshot (temps simulé) s'il existe
+        ts = snapshot.get("ts", _now_iso())
         payload = {
             "schema_version": "1.0",
-            "ts": _now_iso(),
+            "ts": ts,
             **snapshot,
         }
         await self._publish(
@@ -188,12 +193,19 @@ class MqttPublisher:
             )
 
     async def publish_status(
-        self, cluster_id: str, machine_id: str, status: str
+        self, cluster_id: str, machine_id: str, status: str, ts: str | None = None
     ) -> None:
-        """Publie un changement d'état de machine (QoS 1)."""
+        """Publie un changement d'état de machine (QoS 1).
+
+        Args:
+            cluster_id: ID du cluster
+            machine_id: ID de la machine
+            status: Nouveau statut (on/off/degraded)
+            ts: Timestamp simulé (optionnel, sinon heure réelle)
+        """
         await self._publish(
             self._t(cluster_id, machine_id, "status"),
-            {"ts": _now_iso(), "status": status},
+            {"ts": ts or _now_iso(), "status": status},
             qos=self._qos_events,
         )
 
@@ -203,15 +215,17 @@ class MqttPublisher:
         machine_id: str,
         fault_data: dict,
         event: str = "injected",
+        ts: str | None = None,
     ) -> None:
         """Publie un événement de panne ou de recovery (QoS 1).
 
         Parameters
         ----------
         event : ``"injected"`` | ``"recovered"``
+        ts : Timestamp simulé (optionnel, sinon heure réelle)
         """
         payload = {
-            "ts": _now_iso(),
+            "ts": ts or _now_iso(),
             "event": event,
             **fault_data,
         }
@@ -226,7 +240,10 @@ class MqttPublisher:
     # ------------------------------------------------------------------
 
     async def publish_summary(self, cluster_snapshot: dict) -> None:
-        """Publie un résumé KPI du cluster (QoS 1, toutes les 5 s)."""
+        """Publie un résumé KPI du cluster (QoS 1, toutes les 5 s).
+
+        Utilise le timestamp simulé du snapshot cluster.
+        """
         cluster_id = cluster_snapshot["cluster_id"]
         machines = cluster_snapshot.get("machines", {})
         machines_on = sum(
@@ -243,8 +260,10 @@ class MqttPublisher:
             default=0.0,
         )
         power_total = sum(m.get("power_w", 0.0) for m in machines.values())
+        # Utiliser le ts du snapshot cluster (temps simulé)
+        ts = cluster_snapshot.get("ts", _now_iso())
         payload = {
-            "ts": _now_iso(),
+            "ts": ts,
             "cluster_id": cluster_id,
             "machines_total": len(machines),
             "machines_on": machines_on,
@@ -258,11 +277,17 @@ class MqttPublisher:
         )
 
     async def publish_energy(
-        self, cluster_id: str, energy_metrics: dict
+        self, cluster_id: str, energy_metrics: dict, ts: str | None = None
     ) -> None:
-        """Publie les métriques énergétiques du cluster (QoS 1, toutes les 60 s)."""
+        """Publie les métriques énergétiques du cluster (QoS 1, toutes les 60 s).
+
+        Args:
+            cluster_id: ID du cluster
+            energy_metrics: Dict avec energy_kwh_total, cost_eur_total, pue_effective
+            ts: Timestamp simulé (optionnel, sinon heure réelle)
+        """
         payload = {
-            "ts": _now_iso(),
+            "ts": ts or _now_iso(),
             "cluster_id": cluster_id,
             **energy_metrics,
         }

@@ -291,12 +291,17 @@ class MachineSimulator:
 
         self.power_w = power_w
 
-        # Application de pannes de type power_surge (surconsommation)
+        # --- APPLICATION DES PANNES ---
+        # Gestion des différents types de pannes
         for fault in self.faults:
             if fault.fault_type == "power_surge":
+                # Surconsommation électrique
                 power_w *= 1.0 + fault.magnitude
+            elif fault.fault_type == "fan_failure":
+                # Ventilateurs arrêtés → zéro refroidissement actif
+                fan_rpm_mean = 0.0
 
-        # Chaleur injectée
+        # Chaleur injectée (après application des pannes power_surge)
         q_in = compute_heat_input(power_w=power_w, heat_ratio=self.thermal.heat_ratio)
 
         # Phase 7.2 : Constante de temps dépend des fans (refroidissement actif)
@@ -349,15 +354,24 @@ class MachineSimulator:
 
         Le format est volontairement générique, le mapping exact vers les
         topics MQTT est effectué par la couche publisher.
+
+        Les pannes sont appliquées à la lecture des capteurs :
+        - sensor_drift : ajoute un décalage supplémentaire à la température lue
         """
+
+        # Calculer la température lue (avec dérive capteur si panne active)
+        temperature_read = self.temperature_c
+        for fault in self.faults:
+            if fault.fault_type == "sensor_drift":
+                # sensor_drift ajoute un offset à la température lue
+                # magnitude = décalage en °C (ex: 0.5 = +0.5°C d'erreur)
+                temperature_read += fault.magnitude * 10.0  # Amplifier l'effet
 
         # Bug #11 Fix : Retourner sensors comme dict (clé = sensor_id)
         sensors_payload: dict[str, dict] = {}
         for sensor in self._sensors:
             sensors_payload[sensor.config.sensor_id] = {
-                # La dérive et le bruit seront appliqués plus tard
-                # (Phase 3 lors de la génération des messages capteurs).
-                "temp_c": self.temperature_c + sensor.config.bias_c,
+                "temp_c": temperature_read + sensor.config.bias_c,
                 "bias_c": sensor.config.bias_c,
             }
 
@@ -379,7 +393,7 @@ class MachineSimulator:
             "id": self.id,
             "role": self.role,
             "status": self.status,
-            "temperature_c": self.temperature_c,            
+            "temperature_c": temperature_read,
             "power_w": self.power_w,
             "energy_kwh_cumulated": self.energy_kwh_cumulated,
             "fans": fans_payload,

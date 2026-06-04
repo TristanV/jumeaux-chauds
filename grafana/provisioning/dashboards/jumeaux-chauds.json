@@ -4,7 +4,7 @@
   "version": 1,
   "schemaVersion": 38,
   "refresh": "10s",
-  "time": { "from": "now-30m", "to": "now" },
+  "time": { "from": "now-7d", "to": "now" },
   "tags": ["iot", "thermique", "mqtt"],
   "panels": [
     {
@@ -15,7 +15,7 @@
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT bucket AS time, machine_id AS metric, temp_avg_c AS value FROM telemetry_1min WHERE $__timeFilter(bucket) ORDER BY 1",
+          "rawSql": "SELECT ts AS time, machine_id AS metric, temperature_c AS value FROM telemetry WHERE $__timeFilter(ts) AND temperature_c IS NOT NULL ORDER BY ts, machine_id",
           "format": "time_series"
         }
       ],
@@ -41,7 +41,7 @@
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT bucket AS time, 'cluster' AS metric, SUM(power_avg_w) AS value FROM telemetry_1min WHERE $__timeFilter(bucket) GROUP BY bucket ORDER BY 1",
+          "rawSql": "SELECT ts AS time, 'cluster' AS metric, SUM(power_w) AS value FROM telemetry WHERE $__timeFilter(ts) AND power_w IS NOT NULL GROUP BY ts ORDER BY ts",
           "format": "time_series"
         }
       ],
@@ -55,7 +55,7 @@
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT machine_id) AS value FROM telemetry WHERE ts > NOW() - INTERVAL '1 minute' AND status = 'on'",
+          "rawSql": "SELECT MAX(ts) AS time, COUNT(DISTINCT machine_id) AS value FROM telemetry WHERE ts > (SELECT MAX(ts) - INTERVAL '1 minute' FROM telemetry) AND status = 'on'",
           "format": "time_series"
         }
       ],

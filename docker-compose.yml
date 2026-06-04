@@ -40,6 +40,11 @@ services:
       MQTT_ENABLED: ${MQTT_ENABLED:-1}
       MQTT_BROKER_HOST: mosquitto
       MQTT_BROKER_PORT: 1883
+      TIMESCALE_HOST: timescaledb
+      TIMESCALE_PORT: 5432
+      TIMESCALE_DB: jumeaux
+      TIMESCALE_USER: jumeaux
+      TIMESCALE_PASSWORD: ${POSTGRES_PASSWORD:-jumeaux}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 15s

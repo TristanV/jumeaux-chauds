@@ -21,6 +21,7 @@ from config.loader import get_machine_config
 from .machine import MachineSimulator, SensorConfig, ThermalConfig
 from .physics import compute_cost
 from .scenarios import FaultConfig, FaultScheduler, LoadProfileConfig, ScenarioEngine
+from .time import parse_start_time, get_simulated_time_iso
 
 if TYPE_CHECKING:
     from mqtt.publisher import MqttPublisher
@@ -119,6 +120,11 @@ class ClusterSimulator:
         # Buffer circulaire pour export données ML
         from collections import deque
         self._snapshot_buffer = deque(maxlen=100000)
+
+        # Gestion du temps simulé
+        start_time_str = config["simulation"].get("start_time")
+        self._start_time = parse_start_time(start_time_str)
+        logger.info(f"Simulation start time: {self._start_time.isoformat()}")
 
         # Temps et métriques agrégées
         self._running = False
@@ -237,7 +243,7 @@ class ClusterSimulator:
             ``None``.
         """
         self._running = True
-        dt = 1.0 / self._tick_rate_hz
+        dt_per_iteration = 1.0 / self._tick_rate_hz
 
         # Timers pour les publications périodiques
         ticks_per_event = max(1, round(self._tick_rate_hz / self._events_per_sec))
@@ -246,19 +252,24 @@ class ClusterSimulator:
         tick_counter: int = 0
 
         while self._running:
-            await asyncio.sleep(dt)
-            self._t_elapsed_s += dt
+            await asyncio.sleep(dt_per_iteration)
+
+            # ✅ IMPORTANT : dt_simulated = dt_real × speed_multiplier
+            # Exemple : à 60x speed, une itération représente 6 secondes de temps simulé
+            dt_simulated = dt_per_iteration * self._speed_multiplier
+
+            self._t_elapsed_s += dt_simulated
             tick_counter += 1
 
             # Charge globale fournie par le scénario
             load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
 
-            # Tick de chaque machine
+            # Tick de chaque machine (avec temps simulé accéléré)
             for machine in self.machines.values():
-                machine.tick(load_factor=load_factor, dt=dt)
+                machine.tick(load_factor=load_factor, dt=dt_simulated)
 
-            # Planification de pannes
-            self._fault_scheduler.tick(self.machines, dt=dt)
+            # Planification de pannes (avec temps simulé accéléré)
+            self._fault_scheduler.tick(self.machines, dt=dt_simulated)
 
             # Mise à jour des métriques agrégées
             self._update_metrics()
@@ -295,6 +306,8 @@ class ClusterSimulator:
                 snap = machine.snapshot()
                 snap["cluster_id"] = self.cluster_id
                 snap["machine_id"] = machine.id
+                # ✅ IMPORTANT : Ajouter timestamp simulé (sinon publisher utilise datetime.now() = 2026!)
+                snap["ts"] = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
                 # Bug #11 Fix : sensors est maintenant dict, pas list
                 sensors_dict = snap.get("sensors", {})
                 snap["temperatures"] = {
@@ -311,8 +324,9 @@ class ClusterSimulator:
                 current_status = snap.get("status", "")
                 if self._prev_status.get(mid) != current_status:
                     self._prev_status[mid] = current_status
+                    ts_status = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
                     await publisher.publish_status(
-                        self.cluster_id, mid, current_status
+                        self.cluster_id, mid, current_status, ts=ts_status
                     )
 
                 # Changement d'état des fans ?
@@ -330,8 +344,9 @@ class ClusterSimulator:
                         self._published_faults: set[str] = set()
                     if fault_key not in self._published_faults:
                         self._published_faults.add(fault_key)
+                        ts_fault = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
                         await publisher.publish_fault(
-                            self.cluster_id, mid, fault, event="injected"
+                            self.cluster_id, mid, fault, event="injected", ts=ts_fault
                         )
 
         # --- Summary cluster (toutes les 5 s) ----------------------
@@ -340,6 +355,8 @@ class ClusterSimulator:
 
         # --- Métriques énergétiques (toutes les 60 s) ---------------
         if tick_counter % ticks_per_energy == 0:
+            # Calculer le timestamp simulé pour les métriques énergétiques
+            ts_energy = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
             await publisher.publish_energy(
                 self.cluster_id,
                 {
@@ -347,6 +364,7 @@ class ClusterSimulator:
                     "cost_eur_total": round(self.cost_eur_total, 4),
                     "pue_effective": self.pue_effective,
                 },
+                ts=ts_energy,
             )
 
     def stop(self) -> None:
@@ -395,10 +413,15 @@ class ClusterSimulator:
         self.pue_effective = self._pue
 
     def get_snapshot(self) -> dict:
-        """Retourne un snapshot consolidé du cluster."""
+        """Retourne un snapshot consolidé du cluster.
+
+        Le timestamp utilise le temps simulé (start_time + _t_elapsed_s),
+        pas l'heure réelle système.
+        """
         return {
             "cluster_id": self.cluster_id,
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": get_simulated_time_iso(self._start_time, self._t_elapsed_s),
+            "t_elapsed_s": self._t_elapsed_s,  # Pour calculs downstream
             "metrics": {
                 "energy_kwh_total": self.energy_kwh_total,
                 "cost_eur_total": self.cost_eur_total,
@@ -511,6 +534,49 @@ class ClusterSimulator:
             machine.energy_kwh_cumulated = 0.0
 
         logger.info("Time and energy metrics reset")
+
+    async def reset_time_and_energy_with_timescaledb(self) -> None:
+        """Réinitialise le temps + énergie + vide TimescaleDB (reset complet).
+
+        Utile pour recommencer une expérience avec historique propre.
+        Cette méthode est asynchrone car elle appelle TimescaleDB.
+        """
+        import asyncpg
+        import os
+
+        # Soft reset
+        self.reset_time_and_energy()
+
+        # Hard reset — vider TimescaleDB
+        try:
+            # Configuration TimescaleDB depuis ENV ou défauts
+            tsdb_host = os.getenv("TIMESCALE_HOST", "timescaledb")
+            tsdb_port = int(os.getenv("TIMESCALE_PORT", "5432"))
+            tsdb_user = os.getenv("TIMESCALE_USER", "jumeaux")
+            tsdb_password = os.getenv("TIMESCALE_PASSWORD", "jumeaux")  # Défaut: "jumeaux"
+            tsdb_db = os.getenv("TIMESCALE_DB", "jumeaux")
+
+            # Construire DSN avec authentification
+            if tsdb_password:
+                dsn = f"postgresql://{tsdb_user}:{tsdb_password}@{tsdb_host}:{tsdb_port}/{tsdb_db}"
+            else:
+                dsn = f"postgresql://{tsdb_user}@{tsdb_host}:{tsdb_port}/{tsdb_db}"
+
+            logger.info(f"Connecting to TimescaleDB: {tsdb_host}:{tsdb_port}/{tsdb_db} as {tsdb_user}")
+
+            # Connexion et truncate
+            conn = await asyncpg.connect(dsn)
+            try:
+                await conn.execute("TRUNCATE TABLE events CASCADE;")
+                await conn.execute("TRUNCATE TABLE telemetry CASCADE;")
+                logger.info("TimescaleDB tables truncated (events, telemetry)")
+            finally:
+                await conn.close()
+
+        except Exception as exc:
+            logger.error(f"TimescaleDB reset failed: {exc}")
+            # Ne pas lever l'exception — le soft reset a réussi
+            # Log seulement pour avertir l'utilisateur
 
     def get_snapshot_buffer_info(self) -> dict[str, Any]:
         """Retourne des infos sur le buffer de snapshots pour export ML.

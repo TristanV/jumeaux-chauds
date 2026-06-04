@@ -63,6 +63,7 @@ uvicorn api.main:app --port 8000
 # 7. Dashboard (Terminal 5, optionnel)
 streamlit run dashboard/app.py
 # → http://localhost:8501
+# → Menu latéral : liens rapides vers API, API Docs et Grafana
 ```
 
 **→ Pour instructions détaillées, voir [QUICK_START.md](documents/QUICK_START.md)**

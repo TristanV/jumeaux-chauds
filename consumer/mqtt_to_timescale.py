@@ -79,14 +79,30 @@ class MqttConsumer:
             await self._insert_event(cluster_id, machine_id, "status_change", data)
 
     def _convert_ts(self, ts_str: str) -> datetime:
-        ts = ts_str
-        if ts:
+        """Parse un timestamp ISO 8601 depuis MQTT.
+
+        Doit être au format simulé (ex: "2005-01-01T12:30:45.123Z").
+        Ne jamais utiliser datetime.now() — préférer un fallback explicite.
+        """
+        if not ts_str:
+            logger.warning(
+                "Timestamp vide dans payload MQTT — utilisation date par défaut (2005-01-01)"
+            )
+            # Fallback sûr : date de départ simulé par défaut
+            return datetime(2005, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+        try:
+            ts = ts_str
             if ts.endswith("Z"):
                 ts = ts[:-1] + "+00:00"
-            ts = datetime.fromisoformat(ts)
-        else:
-            ts = datetime.now(timezone.utc).isoformat()
-        return ts
+            return datetime.fromisoformat(ts)
+        except (ValueError, AttributeError) as exc:
+            logger.warning(
+                "Format timestamp invalide '%s' — utilisation date par défaut : %s",
+                ts_str,
+                exc
+            )
+            return datetime(2005, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     
     async def _insert_telemetry(
         self,

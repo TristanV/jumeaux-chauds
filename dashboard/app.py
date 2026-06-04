@@ -137,7 +137,28 @@ def render_sidebar(snapshot: dict[str, Any] | None) -> None:
         else:
             st.warning("⏳ En attente du simulateur…")
         st.divider()
-        st.caption("API : http://localhost:8000")
+
+        # Liens vers les services externes
+        st.subheader("🔗 Services externes")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown(
+                "[🌐 API](http://localhost:8000)",
+                unsafe_allow_html=True
+            )
+        with col2:
+            st.markdown(
+                "[📖 API Docs](http://localhost:8000/docs)",
+                unsafe_allow_html=True
+            )
+        with col3:
+            st.markdown(
+                "[📊 Grafana](http://localhost:3000)",
+                unsafe_allow_html=True
+            )
+
+        st.divider()
         st.caption(f"Refresh : {REFRESH_INTERVAL_S}s")
 
 
@@ -402,12 +423,12 @@ def tab_simulation(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     with col3:
         st.write("")
         st.write("")
-        if st.button("🔄 Reset temps", key="btn_reset_time"):
+        if st.button("🗑️ Reset complet", key="btn_reset_complete"):
             try:
-                res = api._post("/simulation/speed/reset", {})
+                res = api._post("/simulation/reset", {})
                 if "ok" in res and res["ok"]:
-                    log_event("Temps et énergie réinitialisés")
-                    st.success("✅ Temps et énergie réinitialisés")
+                    log_event("Reset complet (temps + TimescaleDB)")
+                    st.success("✅ " + res.get("message", "Reset complet effectué"))
                 else:
                     st.error(f"❌ Erreur : {res.get('message', 'Erreur inconnue')}")
             except Exception as e:
@@ -415,6 +436,58 @@ def tab_simulation(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
 
     # Afficher infos vitesse actuelle
     st.info(f"**Vitesse courante :** {current_speed_name} ({current_speed}x)")
+
+    st.divider()
+    st.subheader("📅 Configuration date de départ")
+
+    try:
+        start_time_info = api._get("/simulation/config/start_time")
+        current_start_time_iso = start_time_info.get("start_time_iso", "2005-01-01T00:00:00Z")
+        current_start_time_readable = start_time_info.get("start_time_readable", "2005-01-01 00:00:00 UTC")
+    except Exception:
+        current_start_time_iso = "2005-01-01T00:00:00Z"
+        current_start_time_readable = "2005-01-01 00:00:00 UTC"
+
+    st.write(f"**Date/heure actuelle :** {current_start_time_readable}")
+
+    # Input pour nouvelle date et heure (sans limites de année)
+    col_date, col_time = st.columns(2)
+
+    with col_date:
+        new_start_date_text = st.text_input(
+            "Nouvelle date (YYYY-MM-DD)",
+            value="",
+            placeholder="ex: 2005-01-01",
+            key="start_date_text"
+        )
+
+    with col_time:
+        new_start_time_text = st.text_input(
+            "Nouvelle heure (HH:MM:SS)",
+            value="00:00:00",
+            placeholder="ex: 12:30:45",
+            key="start_time_text"
+        )
+
+    col_apply, col_reset_local = st.columns(2)
+
+    with col_apply:
+        if st.button("✓ Appliquer date/heure", key="btn_apply_start_time"):
+            if new_start_date_text:
+                try:
+                    # Construire ISO 8601 complet
+                    new_start_time_iso = f"{new_start_date_text}T{new_start_time_text}Z"
+
+                    res = api._put("/simulation/config/start_time", {"start_time_iso": new_start_time_iso})
+                    if "ok" in res and res["ok"]:
+                        log_event(f"Date départ changée → {new_start_time_iso}")
+                        st.success(f"✅ Date de départ changée : {new_start_time_iso}\n\nTimescaleDB a été vidée. Attendez quelques secondes...")
+                    else:
+                        st.error(f"❌ Erreur : {res.get('message', 'Erreur inconnue')}")
+                except Exception as e:
+                    st.error(f"❌ Erreur API : {type(e).__name__}: {str(e)}")
+            else:
+                st.error("❌ Veuillez entrer une date au format YYYY-MM-DD")
 
     st.divider()
     st.subheader("🎬 Scénario actif")

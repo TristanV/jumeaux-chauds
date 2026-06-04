@@ -1,9 +1,14 @@
 """Chargeur de configuration hiérarchique via OmegaConf.
 
 Niveaux de merge (du plus général au plus spécifique) :
-    1. config/base.yaml          — valeurs de référence cluster + rôles
-    2. config/scenarios/<x>.yaml — profil de simulation actif
+    1. config/base.yaml          — valeurs de référence cluster + rôles + simulation GLOBALE
+    2. config/scenarios/<x>.yaml — profil de simulation (mode, charge, pannes, etc.)
     3. overrides dict            — surcharges programmatiques ou ENV
+
+IMPORTANT : Les paramètres globaux suivants sont définis dans base.yaml et NE PEUVENT JAMAIS
+être surchargés par un scénario, override ou variable d'environnement :
+  - simulation.start_time : garantit que le changement de scénario ne réinitialise jamais le temps simulé
+  - simulation.speed_multiplier : vitesse par défaut de la simulation (peut être changée via API/dashboard)
 """
 from __future__ import annotations
 
@@ -47,11 +52,24 @@ def load_config(
 
     base_cfg = OmegaConf.load(base_path)
     scenario_cfg = OmegaConf.load(scenario_path)
+
+    # Sauvegarder paramètres globaux avant la fusion (ne DOIVENT JAMAIS être surchargés)
+    start_time_protected = base_cfg.simulation.start_time
+    speed_multiplier_protected = base_cfg.simulation.get("speed_multiplier", 1.0)
+
     merged = OmegaConf.merge(base_cfg, scenario_cfg)
+
+    # Restaurer paramètres globaux pour s'assurer qu'ils ne peuvent pas être surchargés
+    merged.simulation.start_time = start_time_protected
+    merged.simulation.speed_multiplier = speed_multiplier_protected
 
     if overrides:
         override_cfg = OmegaConf.create(overrides)
         merged = OmegaConf.merge(merged, override_cfg)
+
+        # Restaurer paramètres globaux même après les overrides programmatiques
+        merged.simulation.start_time = start_time_protected
+        merged.simulation.speed_multiplier = speed_multiplier_protected
 
     # Surcharge depuis les variables d'environnement
     cluster_id = os.environ.get("CLUSTER_ID")

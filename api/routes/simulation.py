@@ -149,20 +149,19 @@ class SpeedChangeRequest(dict):
 
 
 @router.put("/speed", response_model=CommandResponse)
-async def change_speed(
-    speed_multiplier: float | None = None,
-    speed_name: str | None = None,
-) -> CommandResponse:
+async def change_speed(body: dict = Body(...)) -> CommandResponse:
     """Change la vitesse de simulation à chaud.
 
     Args:
-        speed_multiplier: Multiplier (1.0, 60.0, 3600.0, 86400.0, ou autre)
-        speed_name: Nom prédéfini (alternative à multiplier)
+        body: {"speed_multiplier": 3600.0} ou {"speed_name": "1 hour/sec"}
 
     Returns:
         CommandResponse avec confirmation du changement
     """
     simulator = deps.get_cluster()
+
+    speed_multiplier: float | None = body.get("speed_multiplier")
+    speed_name: str | None = body.get("speed_name")
 
     # Convertir speed_name en multiplier si fourni
     if speed_name:
@@ -182,7 +181,7 @@ async def change_speed(
     elif speed_multiplier is None:
         raise HTTPException(
             status_code=400,
-            detail="Fournir 'speed_multiplier' ou 'speed_name'",
+            detail="Paramètre manquant : 'speed_multiplier' ou 'speed_name' dans le body JSON",
         )
 
     try:
@@ -201,9 +200,9 @@ async def change_speed(
 
 @router.post("/speed/reset", response_model=CommandResponse)
 async def reset_time_and_energy() -> CommandResponse:
-    """Réinitialise le temps écoulé et l'énergie accumulée.
+    """Réinitialise le temps écoulé et l'énergie accumulée (soft reset).
 
-    Utile après une longue simulation pour recommencer une nouvelle expérience.
+    NOTE: TimescaleDB n'est PAS truncatée. Utilisez POST /reset pour reset complet.
 
     Returns:
         CommandResponse avec confirmation
@@ -213,5 +212,128 @@ async def reset_time_and_energy() -> CommandResponse:
 
     return CommandResponse(
         ok=True,
-        message="Temps écoulé et énergie réinitialisés",
+        message="Temps écoulé et énergie réinitialisés (soft reset)",
+    )
+
+
+@router.post("/reset", response_model=CommandResponse)
+async def reset_complete() -> CommandResponse:
+    """Réinitialise COMPLÈTEMENT : temps + énergie + TimescaleDB (hard reset).
+
+    Vide les tables TimescaleDB (telemetry, events) et réinitialise la simulation.
+    ⚠️ DESTRUCTIF — impossible à annuler.
+
+    Returns:
+        CommandResponse avec confirmation
+    """
+    simulator = deps.get_cluster()
+
+    try:
+        await simulator.reset_time_and_energy_with_timescaledb()
+        return CommandResponse(
+            ok=True,
+            message=(
+                "Reset complet effectué :\n"
+                "- Temps écoulé → 0\n"
+                "- Énergie → 0\n"
+                "- TimescaleDB vidée (telemetry, events)"
+            ),
+        )
+    except Exception as exc:
+        logger.error(f"Complete reset failed: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors du reset complet : {str(exc)}",
+        ) from exc
+
+
+# ------------------------------------------------------------------
+# Phase 8.5 — Configuration start_time et speed_multiplier
+# ------------------------------------------------------------------
+
+
+@router.get("/config/start_time")
+async def get_start_time() -> dict:
+    """Retourne la date de départ actuelle (start_time).
+
+    Returns:
+        dict avec :
+        - start_time_iso: String ISO 8601 (ex: "2005-01-01T00:00:00Z")
+        - start_time_unix: Timestamp Unix (secondes)
+        - description: Explication du paramètre
+    """
+    from datetime import datetime
+    simulator = deps.get_cluster()
+    start_time_iso = simulator._start_time.isoformat().replace("+00:00", "Z")
+    start_time_unix = simulator._start_time.timestamp()
+
+    return {
+        "start_time_iso": start_time_iso,
+        "start_time_unix": start_time_unix,
+        "start_time_readable": simulator._start_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "description": "Date de départ absolue de la simulation (point zéro pour tous les timestamps)",
+    }
+
+
+@router.put("/config/start_time", response_model=CommandResponse)
+async def change_start_time(body: dict = Body(...)) -> CommandResponse:
+    """Change la date de départ (start_time) et vide TimescaleDB.
+
+    Le temps écoulé (_t_elapsed_s) persiste ; seule la date de référence change.
+    Les tables telemetry et events sont purgées pour repartir de zéro avec la nouvelle date.
+    Utile pour ajuster le calendrier de la simulation.
+
+    Args:
+        body: {"start_time_iso": "2005-01-01T00:00:00Z"}
+
+    Returns:
+        CommandResponse avec confirmation du changement et du reset TimescaleDB
+    """
+    from simulation.time import parse_start_time
+
+    start_time_iso = body.get("start_time_iso")
+    if not start_time_iso:
+        raise HTTPException(
+            status_code=400,
+            detail="Paramètre manquant : 'start_time_iso' dans le body JSON",
+        )
+
+    simulator = deps.get_cluster()
+
+    try:
+        new_start_time = parse_start_time(start_time_iso)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Format de date invalide : {start_time_iso}. "
+            f"Attendu : ISO 8601 (ex: '2005-01-01T00:00:00Z')",
+        ) from exc
+
+    old_start_time = simulator._start_time
+    simulator._start_time = new_start_time
+
+    logger.info(
+        f"Start time changed from {old_start_time.isoformat()} "
+        f"to {new_start_time.isoformat()} "
+        f"(elapsed time {simulator._t_elapsed_s:.1f}s persists)"
+    )
+
+    # Vider TimescaleDB (telemetry et events) pour repartir de zéro
+    try:
+        await simulator.reset_time_and_energy_with_timescaledb()
+        logger.info("TimescaleDB reset automatique après changement de date")
+    except Exception as exc:
+        logger.error(f"Erreur lors du reset TimescaleDB après changement de date : {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Changement de date effectué mais reset TimescaleDB échoué : {str(exc)}",
+        ) from exc
+
+    return CommandResponse(
+        ok=True,
+        message=(
+            f"Date de départ changée : {old_start_time.strftime('%Y-%m-%d %H:%M:%S UTC')} "
+            f"→ {new_start_time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+            f"TimescaleDB vidée (telemetry et events) — simulation repartir de zéro avec la nouvelle date."
+        ),
     )

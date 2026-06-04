@@ -5,3 +5,4 @@ omegaconf==2.3.0
 pydantic==2.7.0
 numpy==1.26.0
 pyyaml>=6.0.1
+asyncpg>=0.29.0  # Pour connexions TimescaleDB asynchrones
