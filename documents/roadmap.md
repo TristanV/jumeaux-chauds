@@ -59,32 +59,38 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 
 ### Statut global
 
-- [x] Phase 1 — Fondations
-- [x] Phase 2 — Simulation
-- [x] Phase 3 — MQTT
-- [x] Phase 4 — API FastAPI
-- [x] Phase 5 — Dashboard Streamlit
-- [x] Phase 6 — Déploiement Docker
-- [x] Phase 7 — Tests (unitaires + intégration)
-- [ ] Phase 8 — Extensions pédagogiques
+- [x] Phase 1 — Fondations ✅
+- [x] Phase 2 — Simulation ✅
+- [x] Phase 3 — MQTT ✅
+- [x] Phase 4 — API FastAPI ✅
+- [x] Phase 5 — Dashboard Streamlit ✅
+- [x] Phase 6 — Déploiement Docker ✅
+- [x] Phase 7 — Tests (unitaires + intégration) ✅
+- [🔄] Phase 8 — Extensions pédagogiques
+  - [x] 8.1 — Scénarios avancés + MQTT Observer ✅ (26-28 mai 2026)
+  - [x] 8.4 — Contrôle de vitesse de simulation ✅ (29 mai 2026)
+  - [x] 8.5 — Bug fixes (pannes, speed multiplier) ✅ (3-4 juin 2026)
+  - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
+  - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
 ---
 
 ## Prochaine priorité recommandée
 
-La prochaine étape de développement recommandée est **la Phase 7 — Tests**.
+La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
 
 ### Objectifs immédiats
-1. écrire les tests API FastAPI ;
-2. valider le flux WebSocket `/ws/cluster` ;
-3. tester la publication MQTT de bout en bout ;
-4. tester l'ingestion MQTT → TimescaleDB ;
-5. mesurer la couverture de code et corriger les zones non testées.
+1. Implémenter classe `PIDController` dans `simulation/pid.py` (Kp, Ki, Kd, anti-windup)
+2. Ajouter paramètres YAML : setpoint_c, gains, limites RPM
+3. Intégrer dans `MachineSimulator._update_fan_speed()`
+4. Écrire 15+ tests (stabilisation, overshoot, réaction charge)
+5. Valider intégration dashboard (dropdown PID settings)
 
 ### Pourquoi maintenant ?
-- les phases fonctionnelles 1 à 6 sont déjà en place ;
-- le projet expose plusieurs interfaces (REST, WebSocket, MQTT, dashboard, TSDB) ;
-- la priorité n'est plus d'ajouter des briques, mais de **stabiliser l'existant** avant d'étendre le périmètre.
+- Phase 7 (Tests) et Phase 8.1, 8.4, 8.5 (Scénarios, Speed, Bugs) sont **complètes** ;
+- le projet a maintenant une **base solide** (simulation stable, API robuste, tests complets) ;
+- PID regulator apporte une **valeur pédagogique majeure** (enseigne la régulation en temps réel) ;
+- Phase 8.2 et 8.3 sont les **dernières extensions avant livraison Master 2**.
 
 ---
 
