@@ -10,8 +10,8 @@ Ce module valide que :
 from __future__ import annotations
 
 import numpy as np
-
 import pytest
+from omegaconf import OmegaConf
 
 from config.loader import get_machine_config, load_config
 from simulation.cluster import ClusterSimulator
@@ -286,7 +286,12 @@ class TestNominalVsStressLoadProfile:
     """Tests que les profils nominal et stress consomment différemment."""
 
     def test_nominal_lower_load_than_stress(self) -> None:
-        """Vérifie que le profil nominal consomme moins en moyenne."""
+        """Vérifie que le profil nominal consomme moins en moyenne.
+
+        Les pannes sont désactivées pour isoler l'effet du profil de charge :
+        les pannes du scénario stress (fan_failure, power_surge) peuvent éteindre
+        des machines et réduire artificiellement la consommation totale.
+        """
         # Nominal : sine_wave, base=0.35, amplitude=0.20 → moyenne ~0.35
         # Stress : ramp, base=0.20→0.95 over 600s → après 6000 ticks (600s), charge moyenne ~0.57
 
@@ -294,6 +299,10 @@ class TestNominalVsStressLoadProfile:
         sim_nominal = ClusterSimulator(cfg_nominal)
 
         cfg_stress = load_config("stress")
+        # Désactiver les pannes pour isoler l'effet du profil de charge :
+        # les pannes (fan_failure, power_surge) peuvent éteindre des machines
+        # et réduire artificiellement la consommation totale sous celle du nominal.
+        OmegaConf.update(cfg_stress, "simulation.fault_injection.enabled", False)
         sim_stress = ClusterSimulator(cfg_stress)
 
         for m in sim_nominal.machines.values():

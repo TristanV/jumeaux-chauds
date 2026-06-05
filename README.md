@@ -15,7 +15,7 @@ Un projet de Master 2 conçu pour enseigner l'IoT, les modèles thermiques, MQTT
 - ⚙️ **Scénarios de charge avancés** — nominal, stress, heatwave (vague de chaleur 24h), busy_weeks (cycles réalistes 7 jours)
 - 🎮 **Contrôle et observation** — FastAPI REST + WebSocket, MQTT observer en temps réel, injection de pannes
 - 📊 **Dashboards interactifs** — Streamlit pour monitoring temps réel, Grafana pour analytics historiques
-- 🧪 **Suite de tests complète** — 155+ tests unitaires (85% couverture), tests par couche d'architecture
+- 🧪 **Suite de tests complète** — 330+ tests (couverture ≥ 85%), tests par couche d'architecture
 
 ---
 
@@ -164,24 +164,19 @@ docker compose --profile storage up -d
 
 ## 📊 État du Projet
 
-### Phase 7 ✅ COMPLETE
-Fondations pédagogiques solides avec 155+ tests unitaires (85% couverture)
-
-- 7.1 Config YAML multi-level ✅
-- 7.2 Physique thermique ✅
-- 7.3 Machine simulator ✅
-- 7.4 MQTT intégration ✅
-- 7.5 TimescaleDB consumer ✅
+### Phases 1–7 ✅ COMPLÈTES
+Fondations pédagogiques solides avec 330+ tests (couverture ≥ 85%)
 
 ### Phase 8 🔄 En cours
 Extensions pédagogiques prioritaires
 
-- 8.1 Scénarios avancés + MQTT observer ✅
-  - Heatwave (vague de chaleur 24h avec pannes thermiques)
-  - Busy_weeks (cycles réalistes 7 jours)
-  - MQTT observer tool (observation temps réel)
-- 8.2 Contrôleur PID (📋 planifié)
-- 8.3 Projection coût énergétique (📋 planifié)
+- 8.1 Scénarios avancés + MQTT observer ✅ (heatwave 24h, busy_weeks 7j, mqtt_observer.py)
+- 8.4 Contrôle de vitesse de simulation ✅ (speed_multiplier, génération données ML)
+- 8.5 Bug fixes dashboard + simulation ✅
+- 8.6 Bug fixes tests + config ✅ — **317/317 tests, 0 warnings**
+- 8.7 Affinage thermique ✅ — modèle physique réaliste (RPM^1.5, clamp T, sous-pas)
+- 8.2 Régulateur PID configurable ⏳ (planifié)
+- 8.3 Projection coût électrique mensuel ⏳ (planifié)
 
 **→ Détails complets : [roadmap.md](documents/roadmap.md)**
 ---
@@ -217,4 +212,4 @@ Extensions pédagogiques prioritaires
 
 ---
 
-*Dernière mise à jour : 28 mai 2026*
+*Dernière mise à jour : 5 juin 2026*

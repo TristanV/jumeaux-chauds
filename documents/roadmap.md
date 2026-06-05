@@ -1,8 +1,8 @@
 # Jumeaux Chauds — Roadmap de développement
 
 > **Auteur :** Tristan Vanrullen  
-> **Date :** Mai 2026  
-> **Version :** 1.1.0
+> **Date :** Juin 2026  
+> **Version :** 1.2.0
 
 Ce document décompose les spécifications techniques en étapes de développement concrètes et ordonnées. Chaque étape est une unité de travail livrable, testable et mergeable de façon indépendante.
 
@@ -51,10 +51,14 @@ Phase 7 : Tests
   └── Étape 7.5 : Tests TimescaleDB consumer
 
 Phase 8 : Extensions pédagogiques (⭐ prioritaires)
-  ├── Étape 8.1 : Scénarios avancés + MQTT Observer
-  ├── Étape 8.2 : Régulateur PID configurable
-  ├── Étape 8.3 : Coût électrique mensuel
-  └── Étape 8.4 : Contrôle de vitesse de simulation (🔥 ML Data Gen)
+  ├── Étape 8.1 : Scénarios avancés + MQTT Observer ✅
+  ├── Étape 8.4 : Contrôle de vitesse de simulation (🔥 ML Data Gen) ✅
+  ├── Étape 8.5 : Bug fixes dashboard + simulation ✅
+  ├── Étape 8.6 : Bug fixes tests + config (317/317 tests) ✅
+  ├── Étape 8.7 : Affinage thermique (physique réaliste) ✅
+  ├── Étape 8.8 : Corrections tests Phase 8.7 (désync k_cool, fault_injection) ✅
+  ├── Étape 8.2 : Régulateur PID configurable ⏳
+  └── Étape 8.3 : Coût électrique mensuel ⏳
 ```
 
 ### Statut global
@@ -85,6 +89,13 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
     - [x] 8.7.3 — Sous-pas d'intégration pour stabilité numérique
     - [x] 8.7.4 — Constraints thermiques testées (1x, 60x, 3600x speed_multiplier)
     - [x] 8.7.5 — Suite 20 tests complets (bounds, fans, équilibre, contrôle) ✅
+  - [x] 8.8 — Corrections tests désynchronisés Phase 8.7 ✅ (5 juin 2026)
+    - [x] 8.8.1 — k_cool_rpm_factor 3.5→2.0 dans test_machine_yaml_integration.py
+    - [x] 8.8.2 — k_cool 3.5→2.0 + seuil tau recalibré dans test_phase_7_2_corrections.py
+    - [x] 8.8.3 — Désactivation fault_injection dans test_energy_conformity.py
+    - [x] 8.8.4 — Correction test fan cooling (ticks insuffisants pour équilibre thermique)
+    - [x] 8.8.5 — Fix cluster.py : respect du flag fault_injection.enabled
+    - [x] 8.8.6 — Fix conftest.py : k_cool_rpm_factor 3.5→2.0 dans master_thermal_params
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
@@ -93,6 +104,8 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 ## Prochaine priorité recommandée
 
 La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
+
+> **État au 5 juin 2026 :** Phases 8.7 et 8.8 complètes — suite de tests à **339 tests passants**.
 
 ### ✅ Phase 8.7 Complétée — Affinage Thermique
 

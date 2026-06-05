@@ -75,7 +75,7 @@ class TestRoleInheritance:
         # Thermal profile
         assert master_cfg.thermal.ambient_temp_c == 22.0
         assert master_cfg.thermal.tau_max_s == 90.0
-        assert master_cfg.thermal.k_cool_rpm_factor == 3.5
+        assert master_cfg.thermal.k_cool_rpm_factor == 2.0  # Phase 8.7: exposant 1.5, valeur ajustée
         assert master_cfg.thermal.alpha_load_exponent == 1.5
 
     def test_worker_inherits_role_profile(self) -> None:
@@ -86,7 +86,7 @@ class TestRoleInheritance:
         assert worker_cfg.power.idle_watts == 100.0
         assert worker_cfg.power.max_watts == 1450.0
         assert worker_cfg.thermal.tau_max_s == 100.0
-        assert worker_cfg.thermal.k_cool_rpm_factor == 3.0
+        assert worker_cfg.thermal.k_cool_rpm_factor == 2.0  # Phase 8.7: exposant 1.5, valeur ajustée
 
     def test_master_thermal_thresholds(self) -> None:
         """Vérifie les seuils thermiques master : t_shutdown > t_restart."""

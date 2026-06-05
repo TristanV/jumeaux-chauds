@@ -43,7 +43,7 @@ def master_thermal_params() -> dict:
         "ambient_temp_c": 22.0,
         "thermal_capacity_j_per_c": 800.0,
         "tau_max_s": 90.0,
-        "k_cool_rpm_factor": 3.5,
+        "k_cool_rpm_factor": 2.0,  # Phase 8.7: exposant 1.5, valeur alignée sur base.yaml
         "alpha_load_exponent": 1.5,
         "t_shutdown_c": 90.0,
         "t_restart_c": 55.0,

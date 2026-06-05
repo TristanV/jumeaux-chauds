@@ -73,7 +73,8 @@ class ClusterSimulator:
         # Scheduler de pannes
         fault_cfgs: list[FaultConfig] = []
         fault_section = config["simulation"].get("fault_injection", {})
-        for raw in fault_section.get("faults", []):
+        fault_enabled = fault_section.get("enabled", True)
+        for raw in (fault_section.get("faults", []) if fault_enabled else []):
             fault_cfgs.append(
                 FaultConfig(
                     type=raw["type"],

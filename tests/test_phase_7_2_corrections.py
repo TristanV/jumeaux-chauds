@@ -117,9 +117,15 @@ class TestPhase72ThermalTauDependsOnRpm:
     """Tests que tau depend maintenant des RPM."""
 
     def test_tau_decreases_with_rpm(self) -> None:
-        """Verifie que tau(rpm) = tau_max / (1 + k_cool × rpm/1000)."""
+        """Verifie que tau(rpm) decroit avec les RPM (Phase 8.7: exposant 1.5).
+
+        Formule Phase 8.7 : tau = tau_max / (1 + k_cool * (RPM/RPM_max)^1.5)
+        Avec k_cool=2.0 (valeur base.yaml Phase 8.7) et RPM_max=5000 :
+          tau(0)    = 90.0 / 1.0          = 90.0s
+          tau(5000) = 90.0 / (1+2.0*1.0)  = 30.0s  (refroidissement 3x plus rapide)
+        """
         tau_max = 90.0
-        k_cool = 3.5
+        k_cool = 2.0  # Phase 8.7: valeur alignée avec base.yaml
 
         taus = {}
         for rpm in [0, 1000, 2500, 5000]:
@@ -134,7 +140,9 @@ class TestPhase72ThermalTauDependsOnRpm:
         tau_5000 = taus[5000]
 
         assert abs(tau_0 - 90.0) < 0.1
-        assert tau_5000 < 10.0
+        # Phase 8.7: avec k_cool=2.0 et exposant 1.5, tau_5000 = 90/(1+2) = 30s
+        # Refroidissement 3x plus rapide qu'au repos (tau_max/3)
+        assert tau_5000 < tau_max / 2.5  # tau_5000 = 30s < 36s
 
     def test_rpm_dependency_in_tau_formula(self) -> None:
         """Verifie que tau depend des RPM via la formule implemen."""
