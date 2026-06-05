@@ -154,16 +154,19 @@ class MqttConsumer:
         data: dict,
     ) -> None:
         ts = self._convert_ts(data.get("ts"))
+        # Phase 8.11 : extraire la cause depuis le payload (status_change uniquement)
+        cause = data.get("cause", "unknown") if event_type == "status_change" else None
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO events (ts, cluster_id, machine_id, event_type, payload)
-                VALUES ($1, $2, $3, $4, $5::jsonb)
+                INSERT INTO events (ts, cluster_id, machine_id, event_type, cause, payload)
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb)
                 """,
                 ts,
                 cluster_id,
                 machine_id,
                 event_type,
+                cause,
                 json.dumps(data),
             )
             

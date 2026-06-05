@@ -31,6 +31,7 @@ Les données fluent depuis la **simulation** (ClusterSimulator) vers les **clien
 ## Table des matières
 
 0. **[Flux de télémétrie](TELEMETRY_FLOWS.md)** ← **LIRE D'ABORD** (routes de données)
+0b. **[Transitions d'état des machines](SPECS_MACHINE_STATUS_TRANSITIONS.md)** — conditions on/degraded/off, causes, télémétries
 1. [Périmètre et noyau fonctionnel](#1-périmètre-et-noyau-fonctionnel)
 2. [Décisions techniques](#2-décisions-techniques)
 3. [Architecture globale](#3-architecture-globale)
@@ -402,11 +403,17 @@ En mode `manual`, la valeur de `f_rpm` est fixée par la dernière commande API.
 ### 5.3 Logique d'état des machines
 
 ```
-OFF → ON       : commande API power_on, si T ≤ t_restart_c
-ON  → OFF      : T ≥ t_shutdown_c  (protection thermique automatique)
-ON  → DEGRADED : panne active (fan_failure, sensor_drift, power_surge)
-DEGRADED → ON : recovery après recovery_delay_s si T ≤ t_restart_c
+OFF → ON       : commande API power_on() si T ≤ t_restart_c (manuel)
+              ou T ≤ t_restart_c après extinction par surchauffe (auto)
+ON  → OFF      : T ≥ t_shutdown_c (protection thermique, auto)
+              ou commande API power_off() (manuel)
+ON  → DEGRADED : T ≥ t_shutdown_c × 0.95 (surchauffe partielle, auto)
+DEGRADED → OFF : T ≥ t_shutdown_c (surchauffe complète, auto)
+DEGRADED → ON  : T < t_shutdown_c × 0.95 pendant recovery_delay_s (auto)
 ```
+
+> **Documentation complète des transitions :**
+> Voir [`SPECS_MACHINE_STATUS_TRANSITIONS.md`](SPECS_MACHINE_STATUS_TRANSITIONS.md) pour la spécification détaillée de toutes les transitions d'état (matrices, conditions exactes, comportement par état, causes MQTT, comptage dans TimescaleDB).
 
 ### 5.4 Métriques énergétiques du cluster
 

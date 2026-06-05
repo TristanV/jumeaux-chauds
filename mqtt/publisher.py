@@ -193,7 +193,12 @@ class MqttPublisher:
             )
 
     async def publish_status(
-        self, cluster_id: str, machine_id: str, status: str, ts: str | None = None
+        self,
+        cluster_id: str,
+        machine_id: str,
+        status: str,
+        cause: str = "unknown",
+        ts: str | None = None,
     ) -> None:
         """Publie un changement d'état de machine (QoS 1).
 
@@ -201,11 +206,19 @@ class MqttPublisher:
             cluster_id: ID du cluster
             machine_id: ID de la machine
             status: Nouveau statut (on/off/degraded)
+            cause: Cause de la transition. Valeurs possibles :
+                - "overheat"         : T >= t_shutdown_c (on/degraded → off)
+                - "overheat_partial" : T >= 0.95 * t_shutdown_c (on → degraded)
+                - "thermal_recovery" : T <= t_restart_c après overheat (off → on)
+                - "degraded_recovery": délai recovery_delay_s écoulé (degraded → on)
+                - "manual_off"       : action utilisateur power_off()
+                - "manual_on"        : action utilisateur power_on()
+                - "unknown"          : cause non renseignée (rétro-compatibilité)
             ts: Timestamp simulé (optionnel, sinon heure réelle)
         """
         await self._publish(
             self._t(cluster_id, machine_id, "status"),
-            {"ts": ts or _now_iso(), "status": status},
+            {"ts": ts or _now_iso(), "status": status, "cause": cause},
             qos=self._qos_events,
         )
 

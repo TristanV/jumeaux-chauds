@@ -70,6 +70,15 @@ def get_api_client() -> ApiClient:
 if "temp_buffers" not in st.session_state:
     st.session_state.temp_buffers: dict[str, collections.deque] = {}
 
+if "sensor_buffers" not in st.session_state:
+    st.session_state.sensor_buffers: dict[str, dict[str, collections.deque]] = {}
+
+if "fan_buffers" not in st.session_state:
+    st.session_state.fan_buffers: dict[str, dict[str, collections.deque]] = {}
+
+if "prev_machine_states" not in st.session_state:
+    st.session_state.prev_machine_states: dict = {}
+
 if "event_log" not in st.session_state:
     st.session_state.event_log: list[str] = []
 
@@ -160,6 +169,50 @@ def render_sidebar(snapshot: dict[str, Any] | None) -> None:
 
         st.divider()
         st.caption(f"Refresh : {REFRESH_INTERVAL_S}s")
+
+        # Journal des événements permanent (visible tous onglets)
+        if st.session_state.event_log:
+            st.divider()
+            st.subheader("📋 Journal")
+            for entry in st.session_state.event_log[:10]:
+                st.caption(entry)
+
+
+# ---------------------------------------------------------------------------
+# Détection automatique d'événements
+# ---------------------------------------------------------------------------
+
+def _detect_auto_events(snapshot: dict[str, Any] | None) -> None:
+    """Détecte les transitions automatiques en comparant avec le snapshot précédent."""
+    if not snapshot:
+        return
+    machines = snapshot.get("machines", {})
+    prev = st.session_state.get("prev_machine_states", {})
+
+    for mid, mv in machines.items():
+        curr_status = mv.get("status", "off")
+        prev_status = prev.get(mid, {}).get("status")
+
+        if prev_status is not None and curr_status != prev_status:
+            t = mv.get("temperature_c", 0)
+            if curr_status == "off" and prev_status in ("on", "degraded"):
+                log_event(f"🌡️ Surchauffe → {mid} éteint (T={t:.1f}°C)")
+            elif curr_status == "on" and prev_status == "off":
+                log_event(f"🔄 Redémarrage auto → {mid} (T={t:.1f}°C)")
+            elif curr_status == "on" and prev_status == "degraded":
+                log_event(f"✅ Récupération → {mid} opérationnel")
+            elif curr_status == "degraded" and prev_status == "on":
+                log_event(f"⚠️ Dégradé → {mid} (T={t:.1f}°C)")
+
+        prev_faults = {f["type"] for f in prev.get(mid, {}).get("faults", [])}
+        curr_faults = {f["type"] for f in mv.get("faults", [])}
+        for ft in curr_faults - prev_faults:
+            log_event(f"💥 Panne {ft} → {mid}")
+
+    st.session_state.prev_machine_states = {
+        mid: {"status": mv.get("status"), "faults": mv.get("faults", [])}
+        for mid, mv in machines.items()
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -278,40 +331,80 @@ def tab_machine(snapshot: dict[str, Any] | None, api: ApiClient) -> None:
     c2.metric("⚡ Énergie", f"{mv.get('energy_kwh_cumulated', 0):.3f} kWh")
     c3.metric("🌀 Fans", f"{len(fans)} ventilateur(s)")
 
-    if selected not in st.session_state.temp_buffers:
-        st.session_state.temp_buffers[selected] = collections.deque(maxlen=100)
-    st.session_state.temp_buffers[selected].append(temp)
+    # --- Buffers capteurs ---
+    if selected not in st.session_state.sensor_buffers:
+        st.session_state.sensor_buffers[selected] = {}
+    if isinstance(sensors, dict):
+        for sid, sdata in sensors.items():
+            if sid not in st.session_state.sensor_buffers[selected]:
+                st.session_state.sensor_buffers[selected][sid] = collections.deque(maxlen=100)
+            st.session_state.sensor_buffers[selected][sid].append(sdata.get("temp_c", 0))
 
-    buf = list(st.session_state.temp_buffers[selected])
-    if len(buf) > 1:
-        # Utiliser plotly au lieu de st.line_chart() pour éviter erreur "Unrecognized data set"
-        # lors des changements de vitesse de simulation
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            y=buf,
-            mode='lines',
-            name='Température CPU (°C)',
-            line=dict(color='#1f77b4', width=2),
-        ))
-        fig.update_layout(
-            title=None,
-            height=180,
-            margin=dict(l=40, r=20, t=20, b=40),
-            hovermode='x unified',
-            xaxis_title="Temps (ticks)",
-            yaxis_title="Température (°C)",
+    # --- Buffers fans ---
+    if selected not in st.session_state.fan_buffers:
+        st.session_state.fan_buffers[selected] = {}
+    if isinstance(fans, list):
+        for f in fans:
+            fkey = str(f.get("idx", 0))
+            if fkey not in st.session_state.fan_buffers[selected]:
+                st.session_state.fan_buffers[selected][fkey] = collections.deque(maxlen=100)
+            st.session_state.fan_buffers[selected][fkey].append(f.get("rpm", 0))
+
+    # --- Courbe températures par capteur ---
+    sensor_bufs = st.session_state.sensor_buffers.get(selected, {})
+    if sensor_bufs:
+        fig_temp = go.Figure()
+        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+        for i, (sid, buf) in enumerate(sensor_bufs.items()):
+            b = list(buf)
+            if len(b) > 1:
+                fig_temp.add_trace(go.Scatter(
+                    y=b, mode="lines", name=sid,
+                    line=dict(color=colors[i % len(colors)], width=2),
+                ))
+        fig_temp.update_layout(
+            title=f"Télémétrie — {selected} — Températures (°C)",
+            height=220,
+            margin=dict(l=40, r=20, t=40, b=40),
+            hovermode="x unified",
+            xaxis_title="Ticks",
+            yaxis_title="°C",
+            legend=dict(orientation="h", y=-0.3),
         )
-        st.plotly_chart(fig, use_container_width=True, key=f"temp_chart_{selected}")
+        st.plotly_chart(fig_temp, use_container_width=True, key=f"sensor_chart_{selected}")
 
-    if sensors:
-        st.subheader("🌡️ Sondes thermiques")
+    # --- Courbe RPM ventilateurs ---
+    fan_bufs = st.session_state.fan_buffers.get(selected, {})
+    if fan_bufs:
+        fig_fan = go.Figure()
+        fan_colors = ["#9467bd", "#8c564b", "#e377c2"]
+        for i, (fkey, buf) in enumerate(fan_bufs.items()):
+            b = list(buf)
+            if len(b) > 1:
+                fig_fan.add_trace(go.Scatter(
+                    y=b, mode="lines", name=f"Fan {fkey}",
+                    line=dict(color=fan_colors[i % len(fan_colors)], width=2),
+                ))
+        fig_fan.update_layout(
+            title=f"Télémétrie — {selected} — Vitesse fans (RPM)",
+            height=180,
+            margin=dict(l=40, r=20, t=40, b=40),
+            hovermode="x unified",
+            xaxis_title="Ticks",
+            yaxis_title="RPM",
+            legend=dict(orientation="h", y=-0.35),
+        )
+        st.plotly_chart(fig_fan, use_container_width=True, key=f"fan_chart_{selected}")
+
+    if sensors and isinstance(sensors, dict):
+        st.subheader("🌡️ Sondes thermiques (valeurs courantes)")
         st.dataframe(
-            [{"Sonde": sensor_id, "Temp (°C)": f"{s['temp_c']:.1f}"} for sensor_id, s in sensors.items()],
+            [{"Sonde": sid, "Temp (°C)": f"{s['temp_c']:.1f}"} for sid, s in sensors.items()],
             use_container_width=True, hide_index=True,
         )
 
     if fans:
-        st.subheader("🌀 Ventilateurs")
+        st.subheader("🌀 Ventilateurs (état courant)")
         st.dataframe(
             [{"Idx": f["idx"], "RPM": f["rpm"], "Mode": f["mode"]} for f in fans],
             use_container_width=True, hide_index=True,
@@ -661,6 +754,7 @@ def main() -> None:
                    f"<b>Vitesse :</b><br/><code>{speed_name}</code>"
                    f"</div>", unsafe_allow_html=True)
 
+    _detect_auto_events(snapshot)
     render_sidebar(snapshot)
 
     tab1, tab2, tab3, tab4 = st.tabs([

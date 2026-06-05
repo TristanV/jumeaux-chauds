@@ -247,9 +247,14 @@ class ClusterSimulator:
         dt_per_iteration = 1.0 / self._tick_rate_hz
 
         # Timers pour les publications périodiques
-        ticks_per_event = max(1, round(self._tick_rate_hz / self._events_per_sec))
-        ticks_per_summary = max(1, round(self._tick_rate_hz * 5))
-        ticks_per_energy = max(1, round(self._tick_rate_hz * 60))
+        # Phase 8.9 Fix : avec speed_multiplier élevé, publier plus souvent en temps réel
+        # pour maintenir une densité de points constante en temps simulé dans Grafana.
+        # Sans correction, à 3600x les timestamps MQTT sautent de 360s → dents de scie.
+        # On divise ticks_per_event par speed_multiplier (min 1) pour compenser.
+        publish_freq_factor = max(1.0, self._speed_multiplier)
+        ticks_per_event = max(1, round(self._tick_rate_hz / (self._events_per_sec * publish_freq_factor)))
+        ticks_per_summary = max(1, round(self._tick_rate_hz * 5 / publish_freq_factor))
+        ticks_per_energy = max(1, round(self._tick_rate_hz * 60 / publish_freq_factor))
         tick_counter: int = 0
 
         while self._running:
@@ -327,7 +332,9 @@ class ClusterSimulator:
                     self._prev_status[mid] = current_status
                     ts_status = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
                     await publisher.publish_status(
-                        self.cluster_id, mid, current_status, ts=ts_status
+                        self.cluster_id, mid, current_status,
+                        cause=machine.last_status_cause,
+                        ts=ts_status,
                     )
 
                 # Changement d'état des fans ?

@@ -34,10 +34,37 @@
       }
     },
     {
+      "id": 5,
+      "title": "Vitesse moyenne des ventilateurs par machine (RPM)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "postgres" },
+          "rawSql": "SELECT ts AS time, machine_id AS metric, fan_rpm_avg AS value FROM telemetry WHERE $__timeFilter(ts) AND fan_rpm_avg IS NOT NULL ORDER BY ts, machine_id",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "rotrpm",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 1000 },
+              { "color": "orange", "value": 4000 }
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 2,
       "title": "Puissance totale du cluster (W)",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 7 },
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 7 },
       "targets": [
         {
           "datasource": { "type": "postgres" },
@@ -49,23 +76,37 @@
     },
     {
       "id": 3,
-      "title": "Machines actives",
-      "type": "stat",
-      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 7 },
+      "title": "Répartition des machines par statut",
+      "type": "piechart",
+      "gridPos": { "x": 12, "y": 16, "w": 6, "h": 7 },
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT MAX(ts) AS time, COUNT(DISTINCT machine_id) AS value FROM telemetry WHERE ts > (SELECT MAX(ts) - INTERVAL '1 minute' FROM telemetry) AND status = 'on'",
-          "format": "time_series"
+          "rawSql": "SELECT status AS metric, COUNT(*) AS value FROM (SELECT DISTINCT ON (machine_id) machine_id, status FROM telemetry WHERE $__timeFilter(ts) ORDER BY machine_id, ts DESC) latest GROUP BY status",
+          "format": "table"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" } } }
+      "fieldConfig": {
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "on" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#27ae60" } }] },
+          { "matcher": { "id": "byName", "options": "degraded" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#e67e22" } }] },
+          { "matcher": { "id": "byName", "options": "off" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#95a5a6" } }] }
+        ]
+      },
+      "options": {
+        "pieType": "pie",
+        "displayLabels": ["name", "value"],
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] }
+      }
     },
     {
       "id": 4,
       "title": "Pannes récentes",
       "type": "table",
-      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 7 },
+      "gridPos": { "x": 18, "y": 16, "w": 6, "h": 7 },
       "targets": [
         {
           "datasource": { "type": "postgres" },

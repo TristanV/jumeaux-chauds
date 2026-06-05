@@ -33,6 +33,10 @@ CREATE TABLE IF NOT EXISTS events (
     cluster_id      TEXT            NOT NULL,
     machine_id      TEXT            NOT NULL,
     event_type      TEXT            NOT NULL,   -- 'fault' | 'status_change'
+    cause           TEXT,                       -- Phase 8.11: cause de la transition
+                                                -- 'overheat' | 'overheat_partial' |
+                                                -- 'thermal_recovery' | 'degraded_recovery' |
+                                                -- 'manual_on' | 'manual_off' | 'unknown'
     payload         JSONB
 );
 

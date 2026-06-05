@@ -117,6 +117,8 @@ class MachineSimulator:
         self.power_w: float = 0.0
         self.energy_kwh_cumulated: float = 0.0
         self._time_since_overheat_s: float = 0.0
+        self._shutdown_by_overheat: bool = False  # True = éteinte par surchauffe, False = OFF volontaire
+        self.last_status_cause: str = "unknown"   # Cause de la dernière transition de statut
 
         self.fans: list[FanState] = [FanState() for _ in range(fan_count)]
         self._sensors: list[SensorState] = [
@@ -139,12 +141,16 @@ class MachineSimulator:
             return False
         self.status = "on"
         self._time_since_overheat_s = 0.0
+        self._shutdown_by_overheat = False
+        self.last_status_cause = "manual_on"
         return True
 
     def power_off(self) -> None:
-        """Éteint la machine (arrêt logique)."""
+        """Éteint la machine (arrêt logique volontaire)."""
 
         self.status = "off"
+        self._shutdown_by_overheat = False  # Arrêt volontaire : pas de redémarrage auto
+        self.last_status_cause = "manual_off"
 
     def set_fan_speed(self, fan_idx: int, rpm: int) -> None:
         """Fixe manuellement la vitesse d'un ventilateur.
@@ -207,49 +213,76 @@ class MachineSimulator:
             if fault.remaining_s <= 0:
                 self.faults.remove(fault)
 
-        # Si la machine est éteinte, on ne simule que le refroidissement passif.
-        if self.status == "off":
-            self.power_w = 0.0  # Bug #2 Fix: No power when OFF
-            # Passive cooling only - no energy accumulation
-            # Just cool down the machine without consuming power
-            q_in = 0.0  # No heat input when OFF
-            from .physics import compute_tau
+        # Si la machine est éteinte volontairement (power_off utilisateur) :
+        # refroidissement passif uniquement, pas de redémarrage automatique.
+        if self.status == "off" and not self._shutdown_by_overheat:
+            self.power_w = 0.0
+            from .physics import compute_tau, compute_thermal_step
             tau = compute_tau(
                 tau_max=self.thermal.tau_max_s,
-                fan_rpm_mean=0.0,  # Fans off
+                fan_rpm_mean=0.0,
                 k_cool=self.thermal.k_cool,
             )
-            from .physics import compute_thermal_step
             self.temperature_c = compute_thermal_step(
                 t_current=self.temperature_c,
-                q_in=q_in,
+                q_in=0.0,
                 tau=tau,
                 c_th=self.thermal.c_th_j_per_c,
                 t_amb=self.thermal.ambient_temp_c,
                 dt=dt,
             )
-            # NO energy accumulation when OFF
+            return
+
+        # Si la machine est éteinte par surchauffe : refroidissement passif
+        # puis redémarrage automatique dès que T < t_restart_c.
+        if self.status == "off" and self._shutdown_by_overheat:
+            self.power_w = 0.0
+            from .physics import compute_tau, compute_thermal_step
+            tau = compute_tau(
+                tau_max=self.thermal.tau_max_s,
+                fan_rpm_mean=0.0,
+                k_cool=self.thermal.k_cool,
+            )
+            self.temperature_c = compute_thermal_step(
+                t_current=self.temperature_c,
+                q_in=0.0,
+                tau=tau,
+                c_th=self.thermal.c_th_j_per_c,
+                t_amb=self.thermal.ambient_temp_c,
+                dt=dt,
+            )
+            # Redémarrage automatique si T suffisamment basse
+            if self.temperature_c <= self.thermal.t_restart_c:
+                self.status = "on"
+                self._shutdown_by_overheat = False
+                self._time_since_overheat_s = 0.0
+                self.last_status_cause = "thermal_recovery"
             return
 
         # Machine en fonctionnement (on ou degraded)
         self._integrate_thermal(load_factor=load_factor, dt=dt)
 
-        # Gestion de la surchauffe
+        # Gestion de la surchauffe : passage en OFF avec flag overheat
         if self.temperature_c >= self.thermal.t_shutdown_c:
-            # Protection thermique : passage en OFF
             self.status = "off"
+            self._shutdown_by_overheat = True
             self._time_since_overheat_s = 0.0
+            self.last_status_cause = "overheat"
             return
 
-        # Gestion de l'état degraded en fonction de l'historique de surchauffe
-        if self.temperature_c >= self.thermal.t_shutdown_c:
-            self.status = "degraded"
-            self._time_since_overheat_s = 0.0
+        # Gestion de l'état degraded (surchauffe partielle sans shutdown)
+        if self.temperature_c >= self.thermal.t_shutdown_c * 0.95:
+            # Zone de danger : 95% du seuil → mode dégradé
+            if self.status == "on":
+                self.status = "degraded"
+                self._time_since_overheat_s = 0.0
+                self.last_status_cause = "overheat_partial"
         elif self.status == "degraded":
             self._time_since_overheat_s += dt
             if self._time_since_overheat_s >= self.thermal.recovery_delay_s:
                 self.status = "on"
                 self._time_since_overheat_s = 0.0
+                self.last_status_cause = "degraded_recovery"
 
     # ------------------------------------------------------------------
     # Détails internes
