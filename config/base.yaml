@@ -1,3 +1,9 @@
+# ─── Constantes physiques globales (Phase 8.7) ────────────────────────────────
+physics:
+  t_min_c: 0.0                       # Temperature minimum (jamais < T_amb)
+  t_max_c: 100.0                     # Temperature maximum (arret thermique)
+  dt_integration_max_s: 0.1          # Pas d'integration thermique max (s)
+
 # ─── Configuration de simulation (globale, non-surchargeable par scénarios) ───
 simulation:
   start_time: "2005-01-01T00:00:00Z" # Date absolue de départ — editable via dashboard
@@ -14,7 +20,7 @@ cluster:
   location: "Marseille"
   pue: 1.40                          # Power Usage Effectiveness global
   env_factor: 1.05                   # multiplicateur overhead refroidissement
-  electricity_price_eur_kwh: 0.20    # coût €/kWh
+  electricity_price_eur_kwh: 0.20    # cout €/kWh
 
   # ─── Broker MQTT ─────────────────────────────────────────────────────────────
   mqtt:
@@ -40,9 +46,9 @@ cluster:
       thermal:
         ambient_temp_c: 22.0
         thermal_capacity_j_per_c: 800.0
-        tau_max_s: 90.0              # constante de temps thermique max (fans off)
-        k_cool_rpm_factor: 3.5       # contribution refroidissement par rpm×1000
-        alpha_load_exponent: 1.5     # non-linéarité charge → puissance
+        tau_max_s: 90.0              # Phase 8.7: constante de temps max sans fans (s)
+        k_cool_rpm_factor: 2.0       # Phase 8.7: facteur refroidissement (typiquement 1.5-3.0)
+        alpha_load_exponent: 1.5     # non-linearite charge -> puissance
         t_shutdown_c: 90.0
         t_restart_c: 55.0
       temperature_sensors:
@@ -76,7 +82,7 @@ cluster:
         ambient_temp_c: 22.0
         thermal_capacity_j_per_c: 600.0
         tau_max_s: 100.0
-        k_cool_rpm_factor: 3.0
+        k_cool_rpm_factor: 2.0       # Phase 8.7: meme formule que master (RPM^1.5)
         alpha_load_exponent: 1.5
         t_shutdown_c: 88.0
         t_restart_c: 50.0

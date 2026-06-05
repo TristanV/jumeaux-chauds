@@ -352,17 +352,36 @@ avec `L(t) ∈ [0,1]` le facteur de charge fourni par le profil de simulation.
 Q_in(t) = P_elec(t) × heat_ratio
 ```
 
-**Constante de refroidissement dynamique :**
+**Constante de refroidissement dynamique (Phase 8.7 Refined) :**
 
 ```
-tau(t) = tau_max / (1 + k_cool × mean_fan_rpm(t) / 1000)
+tau(t) = tau_max / (1 + k_cool × (mean_fan_rpm(t) / RPM_max)^1.5)
 ```
 
-**Équation thermique différentielle (Euler explicite) :**
+où :
+- `tau_max` : constante de temps max (fans arrêtés, refroidissement passif seul)
+- `k_cool` : facteur d'efficacité des fans (typiquement 2.0)
+- `RPM_max` : vitesse nominale max des fans (par défaut 5000)
+- Exponent `1.5` : reflète la physique réelle des échanges convectifs
+
+**Équation thermique différentielle (Euler explicite avec sous-pas) :**
 
 ```
-T(t + Δt) = T(t) + Δt × [ Q_in(t) / C_th  -  (T(t) - T_amb) / tau(t) ]
+Si dt > dt_max (0.1s):
+  num_substeps = ceil(dt / dt_max)
+  dt_sub = dt / num_substeps
+  
+Pour chaque sous-pas:
+  T += dt_sub × [ Q_in(t) / C_th  -  (T(t) - T_amb) / tau(t) ]
+
+T = clamp(T, T_amb, T_MAX)  [T_MAX = 100°C]
 ```
+
+**Justification physique :**
+- Puissance aérodynamique des fans ∝ RPM³ (loi du cube)
+- Échange thermique convectif ∝ (débit air)^0.6 (corrélation Colburn)
+- Effet combiné : refroidissement ∝ RPM^1.5 (plus réaliste que linéaire)
+- Sous-pas d'intégration : stabilité numérique garantie même à 3600x speed_multiplier
 
 **Valeur observée pour chaque capteur s :**
 

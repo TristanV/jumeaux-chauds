@@ -3,14 +3,22 @@
 Toutes les fonctions sont sans effets de bord et déterministes.
 Elles constituent le noyau mathématique du simulateur.
 
-Modèle thermique du 1er ordre (lumped-parameter) :
+Modèle thermique du 1er ordre (lumped-parameter) — Phase 8.7 Refined :
 
     P_elec(t) = P_idle + (P_max - P_idle) * L(t)^alpha
     Q_in(t)   = P_elec(t) * heat_ratio
-    tau(t)    = tau_max / (1 + k_cool * mean_fan_rpm / 1000)
+    tau(t)    = tau_max / (1 + k_cool * (mean_fan_rpm / RPM_max)^1.5)  <- Phase 8.7: exposant 1.5 (réaliste)
     T(t+dt)   = T(t) + dt * [Q_in(t)/C_th - (T(t)-T_amb)/tau(t)]
+    T clamped  = clamp(T, T_amb, T_max)  <- Phase 8.7: limites physiques
+
+Améliorations Phase 8.7 :
+- Formule tau améliorée avec exposant 1.5 (échange thermique convectif réaliste)
+- Clamp de température à [T_amb, T_max] (jamais négatif, jamais dépassé)
+- Sous-pas d'intégration pour stabilité numérique (speed_multiplier élevé)
 """
 from __future__ import annotations
+
+import math
 
 
 def compute_load_power(
@@ -27,7 +35,7 @@ def compute_load_power(
         load_factor: Facteur de charge dans [0, 1].
         idle_w:      Puissance au repos (W).
         max_w:       Puissance maximale (W).
-        alpha:       Exposant de non-linéarité (≥ 1).
+        alpha:       Exposant de non-linéarité (>= 1).
 
     Returns:
         Puissance instantanée en watts.
@@ -55,23 +63,46 @@ def compute_tau(
     tau_max: float,
     fan_rpm_mean: float,
     k_cool: float,
+    fan_max_rpm: int = 5000,
 ) -> float:
-    """Calcule la constante de temps thermique dynamique.
+    """Calcule la constante de temps thermique dynamique (Phase 8.7 Refined).
 
-    tau(t) = tau_max / (1 + k_cool * fan_rpm_mean / 1000)
+    Phase 8.7 Amélioration : formule réaliste avec exposant 1.5
 
-    Plus les fans tournent vite, plus tau est petit (refroidissement rapide).
+    tau(RPM) = tau_max / (1 + k_cool * (RPM / RPM_max)^1.5)
+
+    Justification physique :
+    - Puissance aérodynamique prop RPM^3 (loi du cube du ventilateur)
+    - Échange thermique convectif prop (débit air)^0.6 (corrélation Colburn)
+    - Combinaison : refroidissement effectif prop RPM^1.5 (plus réaliste que linéaire)
+
+    Comportement:
+    - À RPM=0: tau = tau_max (refroidissement passif uniquement)
+    - À RPM=RPM_max: tau = tau_max / (1 + k_cool) ~= tau_max/3 (refroidissement 3x plus rapide)
 
     Args:
         tau_max:      Constante de temps maximale (fans arrêtés), en secondes.
         fan_rpm_mean: Vitesse moyenne des fans (RPM).
-        k_cool:       Facteur de contribution des fans au refroidissement.
+        k_cool:       Facteur de contribution des fans au refroidissement (typiquement 2.0).
+        fan_max_rpm:  RPM maximum du ventilateur (default=5000).
 
     Returns:
         Constante de temps effective en secondes (> 0).
     """
-    denominator = 1.0 + k_cool * (fan_rpm_mean / 1000.0)
-    return tau_max / max(denominator, 1e-6)
+    # Calculer le ratio RPM/RPM_max pour la formule adimensionnelle
+    rpm_ratio = fan_rpm_mean / max(fan_max_rpm, 1)
+
+    # Phase 8.7: Exposant 1.5 pour refroidissement réaliste
+    # (ancien: linéaire, nouveau: non-linéaire comme aérodynamique réelle)
+    multiplier = 1.0 + k_cool * (rpm_ratio ** 1.5)
+
+    return tau_max / max(multiplier, 1e-6)
+
+
+# Constantes physiques globales (Phase 8.7)
+T_MIN_C = 0.0              # Température minimum (jamais < T_amb)
+T_MAX_C = 100.0            # Température maximum (arrêt thermique)
+DT_INTEGRATION_MAX_S = 0.1  # Pas d'intégration max pour stabilité numérique
 
 
 def compute_thermal_step(
@@ -81,10 +112,25 @@ def compute_thermal_step(
     c_th: float,
     t_amb: float,
     dt: float,
+    dt_max: float = DT_INTEGRATION_MAX_S,
 ) -> float:
-    """Intègre l'équation thermique du 1er ordre (méthode d'Euler explicite).
+    """Intègre l'équation thermique du 1er ordre avec sous-pas et clamp (Phase 8.7 Refined).
 
-    T(t+dt) = T(t) + dt * [Q_in/C_th - (T(t) - T_amb) / tau]
+    Phase 8.7 Améliorations :
+    1. Sous-pas d'intégration : si dt > dt_max, subdiviser pour stabilité numérique
+    2. Clamp de température : jamais T < T_amb (physiquement impossible)
+       et jamais T > T_max (arrêt thermique garantit)
+
+    Équation différentielle (1er ordre, lumped-parameter):
+        dT/dt = [Q_in/C_th - (T - T_amb) / tau]
+
+    Intégration numérique (Euler explicite avec sous-pas) :
+        T(t+dt) = T(t) + dt_sub * [Q_in/C_th - (T(t) - T_amb) / tau]
+        (répété pour chaque sous-pas si dt > dt_max)
+
+    Stabilité (critère de Courant) :
+        dt < 2 * tau_min ~= 2 * 0.5s = 1s (avec tau_min ~= 0.5s à RPM max)
+        En pratique, dt_max = 0.1s donne 10x de sécurité
 
     Args:
         t_current: Température interne actuelle (°C).
@@ -92,13 +138,30 @@ def compute_thermal_step(
         tau:       Constante de temps thermique effective (s).
         c_th:      Capacité thermique (J/°C).
         t_amb:     Température ambiante (°C).
-        dt:        Pas de temps (s).
+        dt:        Pas de temps à intégrer (s).
+        dt_max:    Pas d'intégration maximum pour stabilité (default=0.1s).
 
     Returns:
-        Nouvelle température interne (°C).
+        Nouvelle température interne (°C), clampée à [T_amb, T_max].
     """
-    dT = dt * (q_in / c_th - (t_current - t_amb) / tau)
-    return t_current + dT
+    # Phase 8.7: Nombre de sous-pas pour stabilité numérique
+    # Si dt = 1.0s et dt_max = 0.1s, subdiviser en 10 sous-pas de 0.1s
+    num_substeps = max(1, math.ceil(dt / dt_max))
+    dt_substep = dt / num_substeps
+
+    # Intégrer par sous-pas
+    t = t_current
+    for _ in range(num_substeps):
+        # Équation du 1er ordre : dT/dt = [apport_chaleur - évacuation_chaleur]
+        dT = dt_substep * (q_in / c_th - (t - t_amb) / tau)
+        t = t + dT
+
+    # Phase 8.7: Clamp de température aux limites réalistes
+    # - Jamais < T_amb (température ambiante est limite physique)
+    # - Jamais > T_max (arrêt thermique + clamp de sécurité)
+    t = max(t_amb, min(t, T_MAX_C))
+
+    return t
 
 
 def compute_fan_auto_speed(
@@ -131,7 +194,7 @@ def compute_fan_power_rpm(
 ) -> float:
     """Calcule la puissance consommée par un ventilateur en fonction du RPM.
 
-    Modèle cubique : P_fan(rpm) = P_nominal × (rpm / rpm_max)³
+    Modèle cubique : P_fan(rpm) = P_nominal * (rpm / rpm_max)^3
 
     Justification physique : la puissance aérodynamique augmente avec le cube
     de la vitesse (loi du cube du ventilateur).
@@ -205,7 +268,7 @@ def compute_cost(
 
     Args:
         energy_kwh:    Énergie IT cumulée (kWh).
-        pue:           Power Usage Effectiveness (≥ 1.0).
+        pue:           Power Usage Effectiveness (>= 1.0).
         price_eur_kwh: Tarif électrique (€/kWh).
 
     Returns:

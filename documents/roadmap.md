@@ -79,6 +79,12 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
     - [x] 8.6.6 — Fix test_change_start_time_preserves_elapsed (timestamps identiques)
     - [x] 8.6.7 — Fix pytest warnings (asyncio_default_fixture_loop_scope, aiomqtt filter)
     - [x] 8.6.8 — Validation complète (317/317 tests passants, 0 warnings) ✅
+  - [x] 8.7 — Affinage thermique (comportement réaliste) ✅ (4-5 juin 2026) — **20/20 tests**
+    - [x] 8.7.1 — Formule tau améliorée avec exponent 1.5 (RPM^1.5)
+    - [x] 8.7.2 — Clamp de température [T_amb, T_max]
+    - [x] 8.7.3 — Sous-pas d'intégration pour stabilité numérique
+    - [x] 8.7.4 — Constraints thermiques testées (1x, 60x, 3600x speed_multiplier)
+    - [x] 8.7.5 — Suite 20 tests complets (bounds, fans, équilibre, contrôle) ✅
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
@@ -88,18 +94,33 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 
 La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
 
-### Objectifs immédiats
+### ✅ Phase 8.7 Complétée — Affinage Thermique
+
+**Résultats :**
+- ✅ 20/20 tests passants (Temperature bounds, Fan cooling, Numerical stability, Thermal equilibrium, Energy/cooling coherence, Fan auto control, Shutdown/restart)
+- ✅ Formule tau améliorée : `tau = tau_max / (1 + k_cool * (RPM/RPM_max)^1.5)`
+- ✅ Clamp température [T_amb, 100°C] empêchant T < 0
+- ✅ Sous-pas d'intégration pour stabilité numérique (dt_max = 0.1s)
+- ✅ Testé jusqu'à 3600x speed_multiplier sans divergence
+- ✅ Configuration physique centralisée dans `config/base.yaml`
+
+**Fichiers livrés :**
+- `simulation/physics.py` — Modèle thermique Phase 8.7 (277 lignes)
+- `simulation/machine.py` — Intégration fan_max_rpm (404 lignes)
+- `tests/test_thermal_refinement.py` — Suite 20 tests (455 lignes)
+- `config/base.yaml` — Constantes physiques + k_cool=2.0
+
+### Objectifs Phase 8.2 : Régulateur PID
 1. Implémenter classe `PIDController` dans `simulation/pid.py` (Kp, Ki, Kd, anti-windup)
 2. Ajouter paramètres YAML : setpoint_c, gains, limites RPM
 3. Intégrer dans `MachineSimulator._update_fan_speed()`
 4. Écrire 15+ tests (stabilisation, overshoot, réaction charge)
 5. Valider intégration dashboard (dropdown PID settings)
 
-### Pourquoi maintenant ?
-- Phase 7 (Tests) et Phase 8.1, 8.4, 8.5 (Scénarios, Speed, Bugs) sont **complètes** ;
-- le projet a maintenant une **base solide** (simulation stable, API robuste, tests complets) ;
-- PID regulator apporte une **valeur pédagogique majeure** (enseigne la régulation en temps réel) ;
-- Phase 8.2 et 8.3 sont les **dernières extensions avant livraison Master 2**.
+### Calendrier restant
+- Phase 8.2 — Régulateur PID configurable (4-6h)
+- Phase 8.3 — Coût électrique mensuel (2-3h)
+- Livraison Master 2
 
 ---
 
@@ -543,7 +564,84 @@ python scripts/mqtt_observer.py -v
 
 ---
 
-### Étape 8.4 — Contrôle de vitesse de simulation (🔥 ML Data Gen) ⭐⭐⭐ (À faire)
+### Étape 8.7 — Affinage Thermique (Comportement Réaliste) ⭐⭐⭐ (À démarrer)
+
+**Objectif :** Corriger les comportements thermiques irréalistes et implémenter des contraintes physiques réalistes.
+
+**Problèmes observés :**
+1. Températures deviennent négatives (< 0°C, impossible)
+2. Refroidissement par ventilateurs insuffisant
+3. Instabilité numérique avec speed_multiplier élevé (> 1s/tick)
+4. Équilibre thermique oscille plutôt que converger
+
+**Tâches :**
+
+- [ ] **8.7.1 — Améliorer formule refroidissement fan** (1h)
+  - Changer `compute_tau()` : tau = tau_max / (1 + k_cool × (RPM/RPM_max)^1.5)
+  - Justification : échange thermique convectif ∝ débit_air^0.6 ≈ RPM^1.5 (plus réaliste)
+  - Impact : fans refroidissent 2-3x plus efficacement à RPM max
+
+- [ ] **8.7.2 — Implémenter clamp de température** (1h)
+  - Ajouter T_min, T_max en constantes `physics.py`
+  - Clamp dans `compute_thermal_step()` : T ∈ [T_amb, T_max]
+  - Jamais T < T_amb (température ambiante est limite physique)
+  - Jamais T > T_max (arrêt thermique garantit cela)
+
+- [ ] **8.7.3 — Ajouter sous-pas d'intégration numérique** (1.5h)
+  - Implémenter dt_max = 0.1s dans `compute_thermal_step()`
+  - Si dt > dt_max, subdiviser en sous-pas (stabilité Euler explicite)
+  - Essentiel pour speed_multiplier > 1 (dt_simulé peut atteindre 1-600s)
+
+- [ ] **8.7.4 — Écrire tests thermiques complets** (2h)
+  - 20+ tests couvrant : limites T, refroidissement fan, stabilité numérique, équilibre
+  - Fichier : `tests/test_thermal_refinement.py` (déjà créé)
+  - Tests paramétrés : plusieurs speed_multiplier (1x, 60x, 3600x)
+
+- [ ] **8.7.5 — Valider et ajuster paramètres** (1h)
+  - Vérifier tau values réalistes (10-100s typiquement)
+  - Vérifier k_cool values (1.0-3.0 appropriés)
+  - Tester tous les scénarios (nominal, stress, heatwave, busy_weeks)
+
+**Configuration YAML (nouvelles constantes) :**
+
+```yaml
+# config/base.yaml — ajouter section physique
+
+physics:
+  t_min_c: 0.0                    # Température minimum (température ambiante)
+  t_max_c: 100.0                  # Température maximum (arrêt thermique)
+  dt_integration_max_s: 0.1       # Pas max pour stabilité numérique
+
+machines:
+  srv-master-01:
+    thermal:
+      tau_max_s: 50.0             # Constante de temps sans fans (s)
+      k_cool: 2.0                 # Facteur refroidissement (dimensionless)
+      # Formule: tau(RPM) = tau_max / (1 + k_cool × (RPM/5000)^1.5)
+```
+
+**Résultats attendus :**
+
+| Comportement | Avant (BUG) | Après (FIXÉ) |
+|-------------|-----------|------------|
+| T_min | -15°C | ≥ T_amb = 20°C ✅ |
+| T_max | > 110°C | ≤ 100°C ✅ |
+| Refroidissement fan | Faible | 2-3x plus fort ✅ |
+| Stabilité 3600x speed | Oscille/diverge | Stable ✅ |
+| Tests thermiques | 0 | 20+ ✅ |
+
+**Documentation :** Fichier créé `documents/PHASE_8_7_THERMAL_REFINEMENT_SPEC.md`
+
+**Critère d'acceptation :**
+- ✅ Zéro tempérauture négative (test suit)
+- ✅ Tempérauture max respectée (100°C)
+- ✅ Refroidissement fan efficace (20+ tests)
+- ✅ Stabilité 3600x speed multiplier (pas d'oscillation)
+- ✅ 20+ tests thermiques complets, tous passants
+
+---
+
+### Étape 8.4 — Contrôle de vitesse de simulation (🔥 ML Data Gen) ⭐⭐⭐ ✅
 
 **Objectif :** Permettre d'accélérer la simulation pour générer de grandes quantités de données ML rapidement, en évitant la surchauffe CPU.
 

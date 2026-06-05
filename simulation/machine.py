@@ -304,13 +304,14 @@ class MachineSimulator:
         # Chaleur injectée (après application des pannes power_surge)
         q_in = compute_heat_input(power_w=power_w, heat_ratio=self.thermal.heat_ratio)
 
-        # Phase 7.2 : Constante de temps dépend des fans (refroidissement actif)
-        # tau(t) = tau_max / (1 + k_cool * fan_rpm_mean / 1000)
+        # Phase 8.7 : Constante de temps améliorée avec formule réaliste
+        # tau(RPM) = tau_max / (1 + k_cool * (RPM / RPM_max)^1.5)
         from .physics import compute_tau
         tau = compute_tau(
             tau_max=self.thermal.tau_max_s,
             fan_rpm_mean=fan_rpm_mean,
             k_cool=self.thermal.k_cool,
+            fan_max_rpm=self.thermal.fan_max_rpm,  # Phase 8.7: nouveau paramètre
         )
 
         # Intégration de la température
