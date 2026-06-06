@@ -1139,3 +1139,111 @@ mosquitto_sub -h localhost -t "dt/cluster_alpha/+/fault" -v
 ---
 
 *Tristan Vanrullen — La Plateforme, Marseille — 2026*
+
+---
+
+### 14.5 Architecture speed_multiplier (Phase 8.12)
+
+#### Invariant fondamental
+
+`dt_sim = 1 / tick_rate_hz` est **constant** quelle que soit la vitesse de simulation.  
+La vitesse (`speed_multiplier`) multiplie le nombre de ticks simulés par unité de temps réel — jamais la taille du pas temporel.
+
+```
+dt_sim = 1 / tick_rate_hz = 0.1s   (fixe)
+ticks_simulés/s_réel = tick_rate_hz × speed_multiplier
+```
+
+**Conséquence clé :** la charge CPU par tick est identique à toutes les vitesses (1 seul sous-pas thermique de 0.1s, qui est exactement DT_INTEGRATION_MAX).
+
+#### Mode 1 — Temps réel / monitoring (speed ≤ quelques centaines)
+
+**Architecture :**
+```
+asyncio.sleep(1 / cpu_throttle_target_hz)   ← cadence réelle throttlée
+  batch_size = round(speed × dt_real)        ← ticks simulés par itération
+  pour i in range(batch_size):
+    machine.tick(dt=0.1s_sim)               ← toujours dt_sim fixe
+  publier dernier snapshot de chaque machine ← pas tous les ticks
+```
+
+**Paramètres YAML :**
+```yaml
+simulation:
+  tick_rate_hz: 10.0               # points par seconde simulée
+  speed_multiplier: 60.0           # 1 min simulée par sec réelle
+  cpu_throttle_enabled: true
+  cpu_throttle_target_hz: 100.0    # fréquence réelle max de la boucle
+```
+
+**Comportement à différentes vitesses :**
+
+| Vitesse | batch_size/iter | Iterations/s réel | Points simulés/s réel | Gap simulé entre points |
+|---|---|---|---|---|
+| 1x | 1 | 100 | 100 | 0.1s |
+| 60x | 6 | 100 | 600 | 0.1s |
+| 3600x | 360 | 100 | 36 000 | 0.1s |
+
+Le gap en **temps simulé** entre deux points publiés reste `0.1s` à toutes les vitesses.
+
+#### Mode 2 — Génération de corpus ML (script autonome)
+
+**Objectif :** générer rapidement un corpus historique (1 semaine à 1 an de données) sans contrainte temps réel.
+
+**Script :** `scripts/generate_dataset.py`
+
+```bash
+# Générer 30 jours de données stress → Parquet
+python scripts/generate_dataset.py \
+  --scenario stress \
+  --duration 30d \
+  --output dataset_30j.parquet \
+  --format parquet
+
+# Générer 7 jours → CSV + insert TimescaleDB
+python scripts/generate_dataset.py \
+  --scenario nominal \
+  --duration 7d \
+  --output dataset_7j.csv \
+  --format csv \
+  --timescaledb
+```
+
+**Architecture :** boucle Python synchrone pure, sans asyncio, sans MQTT, sans WebSocket.
+
+```python
+while t_elapsed < duration:
+    load_factor = scenario_engine.get_load_factor(t_elapsed)
+    for machine in machines.values():
+        machine.tick(load_factor=load_factor, dt=dt_sim)
+    snapshots.append(build_row(machines, t_elapsed))
+    t_elapsed += dt_sim
+
+# Export
+df = pd.DataFrame(snapshots)
+df.to_parquet(output_path)
+```
+
+**Performance estimée** (~100k ticks/s en Python pur) :
+
+| Durée simulée | Temps réel estimé |
+|---|---|
+| 1 jour | ~9 secondes |
+| 1 semaine | ~1 minute |
+| 1 mois | ~4 minutes |
+| 1 an | ~52 minutes |
+
+**Structure du fichier de sortie :**
+
+| Colonne | Type | Description |
+|---|---|---|
+| `ts` | datetime | Timestamp simulé (ISO 8601) |
+| `cluster_id` | str | Identifiant du cluster |
+| `machine_id` | str | Identifiant de la machine |
+| `status` | str | on / degraded / off |
+| `temperature_c` | float | Température CPU (°C) |
+| `power_w` | float | Puissance totale (W) |
+| `energy_kwh` | float | Énergie cumulée (kWh) |
+| `load_factor` | float | Charge CPU [0, 1] |
+| `fan_rpm_avg` | float | Vitesse moyenne fans (RPM) |
+| `fault_active` | bool | Panne active au tick |

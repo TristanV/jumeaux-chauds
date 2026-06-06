@@ -58,6 +58,9 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
   ├── Étape 8.7 : Affinage thermique (physique réaliste) ✅
   ├── Étape 8.8 : Corrections tests Phase 8.7 (désync k_cool, fault_injection) ✅
   ├── Étape 8.9 : Corrections bugs comportementaux (auto-restart, dashboard, Grafana) ✅
+  ├── Étape 8.12 : Refonte architecture speed_multiplier ⏳
+  │   ├── 8.12A : Correction boucle temps réel (dt_sim fixe, CPU throttle, batch)
+  │   └── 8.12B : Script génération corpus ML (batch synchrone, CSV/Parquet)
   ├── Étape 8.2 : Régulateur PID configurable ⏳
   └── Étape 8.3 : Coût électrique mensuel ⏳
 ```
@@ -120,6 +123,21 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
     - [x] 8.11.6 — Grafana : remplacement panel "Machines actives" par pie chart 3 secteurs (on/degraded/off)
     - [x] 8.11.7 — Création SPECS_MACHINE_STATUS_TRANSITIONS.md (matrices transitions, comportement, télémétries, comptage)
     - [x] 8.11.8 — Mise à jour specifications.md (section 5.3 + lien vers specs transitions)
+  - [ ] 8.12 — Refonte architecture speed_multiplier ⏳ (En cours)
+    - [ ] 8.12A — Correction boucle temps réel (dt_sim fixe, CPU throttle branché, batch ticks)
+      - [ ] 8.12A.1 — cluster.py : dt_sim = 1/tick_rate_hz constant (indépendant de speed)
+      - [ ] 8.12A.2 — cluster.py : brancher cpu_throttle (asyncio.sleep = 1/throttle_hz)
+      - [ ] 8.12A.3 — cluster.py : batch_size ticks simulés par itération réelle
+      - [ ] 8.12A.4 — cluster.py : publier dernier snapshot seulement (pas tous les ticks calculés)
+      - [ ] 8.12A.5 — Tests : vérifier comportement 1x inchangé, 60x et 3600x corrects
+      - [ ] 8.12A.6 — Commit : "fix(cluster): constant dt_sim, working CPU throttle, batch ticks"
+    - [ ] 8.12B — Script génération corpus ML (mode batch pur)
+      - [ ] 8.12B.1 — scripts/generate_dataset.py : boucle synchrone pure, pas d'asyncio
+      - [ ] 8.12B.2 — Export CSV et Parquet (pandas/pyarrow)
+      - [ ] 8.12B.3 — Insert bulk TimescaleDB optionnel (asyncpg COPY)
+      - [ ] 8.12B.4 — CLI : --scenario, --duration, --output, --format
+      - [ ] 8.12B.5 — Tests : vérifier structure CSV/Parquet, perf > 50k ticks/s
+      - [ ] 8.12B.6 — Commit : "feat(generate_dataset): batch ML corpus generation script"
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
@@ -127,9 +145,23 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 
 ## Prochaine priorité recommandée
 
-La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
+La prochaine étape de développement recommandée est **la Phase 8.12 — Refonte architecture speed_multiplier**.
 
-> **État au 5 juin 2026 :** Phases 8.7, 8.8 et 8.9 complètes — suite de tests à **339 tests passants**.
+> **État au 6 juin 2026 :** Phase 8.12 en cours — correction architecture speed_multiplier (boucle temps réel + génération corpus ML).
+
+### Contexte Phase 8.12 — Pourquoi cette refonte
+
+**Diagnostic :** l'implémentation actuelle du `speed_multiplier` souffre de deux bugs fondamentaux :
+
+1. **`dt_sim` croît avec la vitesse** : à 3600x, chaque tick représente `dt_sim = 360s` simulés, forçant 3600 sous-pas thermiques par tick. La charge CPU croît linéairement avec la vitesse → crash asyncio à 3600x.
+
+2. **CPU throttle non branché** : `_throttle_interval_s` est calculé à l'init mais jamais utilisé dans la boucle `run()`. La boucle tourne toujours à `tick_rate_hz=10Hz` fixe, ignorant la config throttle.
+
+**Spécification correcte** : `dt_sim = 1/tick_rate_hz = 0.1s` constant. La vitesse multiplie le nombre de ticks simulés par unité de temps réel, pas la taille du pas. La charge CPU reste identique à toutes les vitesses.
+
+**Deux modes distincts :**
+- **Mode temps réel/monitoring** (speed ≤ quelques centaines) : boucle asyncio throttlée, batch de ticks simulés par itération, publication du dernier snapshot seulement.
+- **Mode génération corpus ML** (besoin : 1 semaine à 1 an de données en quelques minutes) : script synchrone pur sans asyncio/MQTT, boucle Python libre, export direct CSV/Parquet ou bulk insert TimescaleDB. Objectif : ~100k ticks/s → 1 mois de données en ~4 minutes.
 
 ### ✅ Phase 8.7 Complétée — Affinage Thermique
 

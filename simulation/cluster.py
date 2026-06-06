@@ -244,72 +244,87 @@ class ClusterSimulator:
             ``None``.
         """
         self._running = True
-        dt_per_iteration = 1.0 / self._tick_rate_hz
 
-        # Timers pour les publications périodiques
-        # Phase 8.9 Fix : avec speed_multiplier élevé, publier plus souvent en temps réel
-        # pour maintenir une densité de points constante en temps simulé dans Grafana.
-        # Sans correction, à 3600x les timestamps MQTT sautent de 360s → dents de scie.
-        # On divise ticks_per_event par speed_multiplier (min 1) pour compenser.
-        publish_freq_factor = max(1.0, self._speed_multiplier)
-        ticks_per_event = max(1, round(self._tick_rate_hz / (self._events_per_sec * publish_freq_factor)))
-        ticks_per_summary = max(1, round(self._tick_rate_hz * 5 / publish_freq_factor))
-        ticks_per_energy = max(1, round(self._tick_rate_hz * 60 / publish_freq_factor))
-        tick_counter: int = 0
+        # ── Phase 8.12A — Architecture corrigée ─────────────────────────
+        # INVARIANT : dt_sim = 1/tick_rate_hz = constant (indépendant de speed)
+        # La vitesse multiplie le NOMBRE de ticks simulés par itération réelle.
+        # Charge CPU par tick : identique à toutes les vitesses.
+        dt_sim = 1.0 / self._tick_rate_hz  # pas temporel fixe (0.1s simulé)
+
+        # Cadence réelle de la boucle (CPU throttle enfin branché)
+        if self._cpu_throttle_enabled:
+            dt_real_loop = 1.0 / self._cpu_throttle_target_hz
+        else:
+            dt_real_loop = dt_sim  # fallback : même cadence que tick_rate
+
+        # Nombre de ticks simulés par itération réelle
+        batch_size = max(1, round(self._speed_multiplier * dt_real_loop * self._tick_rate_hz))
+
+        # Timers publications périodiques (en ticks simulés cumulés)
+        ticks_per_summary = max(1, round(5.0 * self._tick_rate_hz))
+        ticks_per_energy = max(1, round(60.0 * self._tick_rate_hz))
+        tick_counter: int = 0  # ticks simulés cumulés
+
+        logger.info(
+            "run() — speed=%.1fx | dt_sim=%.3fs | throttle=%s@%.0fHz | batch=%d ticks/iter",
+            self._speed_multiplier, dt_sim,
+            "ON" if self._cpu_throttle_enabled else "OFF",
+            self._cpu_throttle_target_hz, batch_size,
+        )
 
         while self._running:
-            await asyncio.sleep(dt_per_iteration)
+            await asyncio.sleep(dt_real_loop)
 
-            # ✅ IMPORTANT : dt_simulated = dt_real × speed_multiplier
-            # Exemple : à 60x speed, une itération représente 6 secondes de temps simulé
-            dt_simulated = dt_per_iteration * self._speed_multiplier
+            # ── Batch de ticks simulés ──────────────────────────────────
+            status_transitions: list[tuple[str, str, str]] = []
 
-            self._t_elapsed_s += dt_simulated
-            tick_counter += 1
+            for _ in range(batch_size):
+                self._t_elapsed_s += dt_sim
+                tick_counter += 1
 
-            # Charge globale fournie par le scénario
-            load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
+                load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
 
-            # Tick de chaque machine (avec temps simulé accéléré)
-            # Capturer les statuts AVANT le tick pour détecter les transitions
-            pre_tick_statuses = {mid: m.status for mid, m in self.machines.items()}
-            for machine in self.machines.values():
-                machine.tick(load_factor=load_factor, dt=dt_simulated)
+                # Capturer statuts avant ce tick individuel
+                pre_tick_statuses = {mid: m.status for mid, m in self.machines.items()}
 
-            # Planification de pannes (avec temps simulé accéléré)
-            self._fault_scheduler.tick(self.machines, dt=dt_simulated)
+                for machine in self.machines.values():
+                    machine.tick(load_factor=load_factor, dt=dt_sim)
 
-            # Mise à jour des métriques agrégées
-            self._update_metrics()
-
-            # ---- Détection immédiate des transitions de statut (QoS 1) ----
-            # Publié à chaque tick (pas seulement à ticks_per_event) pour éviter
-            # que last_status_cause soit écrasé par une transition ultérieure.
-            if publisher is not None:
-                ts_status = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
+                # Détecter transitions immédiatement après chaque tick
                 for machine in self.machines.values():
                     mid = machine.id
-                    current_status = machine.status
-                    if pre_tick_statuses.get(mid) != current_status:
-                        self._prev_status[mid] = current_status
-                        await publisher.publish_status(
-                            self.cluster_id, mid, current_status,
-                            cause=machine.last_status_cause,
-                            ts=ts_status,
+                    if pre_tick_statuses.get(mid) != machine.status:
+                        status_transitions.append(
+                            (mid, machine.status, machine.last_status_cause)
                         )
 
-            # ---- Publications MQTT --------------------------------
+                self._fault_scheduler.tick(self.machines, dt=dt_sim)
+
+            # Métriques agrégées (une fois par batch)
+            self._update_metrics()
+
+            # ── Publications MQTT (une fois par batch) ──────────────────
             if publisher is not None:
+                ts_now = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
+
+                # Transitions de statut (QoS 1)
+                for mid, new_status, cause in status_transitions:
+                    self._prev_status[mid] = new_status
+                    await publisher.publish_status(
+                        self.cluster_id, mid, new_status,
+                        cause=cause, ts=ts_now,
+                    )
+
+                # Télémétrie + summary + energy
                 await self._publish_tick(
                     publisher,
                     tick_counter,
-                    ticks_per_event,
                     ticks_per_summary,
                     ticks_per_energy,
                 )
 
-            # ---- Broadcast WebSocket (Phase 4) --------------------
-            if ws_manager is not None and tick_counter % ticks_per_event == 0:
+            # ── Broadcast WebSocket (à chaque itération) ────────────────
+            if ws_manager is not None:
                 try:
                     await ws_manager.broadcast(self.get_snapshot())
                 except Exception as exc:  # noqa: BLE001
@@ -319,14 +334,16 @@ class ClusterSimulator:
         self,
         publisher: "MqttPublisher",
         tick_counter: int,
-        ticks_per_event: int,
         ticks_per_summary: int,
         ticks_per_energy: int,
     ) -> None:
-        """Gère toutes les publications MQTT pour le tick courant."""
-        # --- Télémétrie par machine (fréquence events_per_sec) -----------
-        if tick_counter % ticks_per_event == 0:
-            for machine in self.machines.values():
+        """Gère toutes les publications MQTT pour une itération de la boucle.
+
+        Phase 8.12A : appelé à chaque itération réelle (cadencée par cpu_throttle).
+        La télémétrie est publiée à chaque appel.
+        """
+        # --- Télémétrie par machine (à chaque itération) -----------------
+        for machine in self.machines.values():
                 snap = machine.snapshot()
                 snap["cluster_id"] = self.cluster_id
                 snap["machine_id"] = machine.id
@@ -397,21 +414,17 @@ class ClusterSimulator:
         Utile pour les tests : permet de simuler un tick sans lancer la boucle async.
         Phase 8.2 : Bug #6-8 fix — ajouter cette méthode pour les tests.
         """
-        dt = 1.0 / self._tick_rate_hz
+        # Phase 8.12A : dt_sim fixe = 1/tick_rate_hz (indépendant de speed_multiplier)
+        # Le speed_multiplier est géré par batch_size dans run() async.
+        dt_sim = 1.0 / self._tick_rate_hz
         load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
 
-        # Tick pour chaque machine
         for machine in self.machines.values():
-            machine.tick(load_factor=load_factor, dt=dt)
+            machine.tick(load_factor=load_factor, dt=dt_sim)
 
-        # Planification de pannes
-        self._fault_scheduler.tick(self.machines, dt=dt)
-
-        # Mise à jour des métriques agrégées
+        self._fault_scheduler.tick(self.machines, dt=dt_sim)
         self._update_metrics()
-
-        # Phase 8.4 — Appliquer speed_multiplier à l'accumulation du temps
-        self._t_elapsed_s += dt * self._speed_multiplier
+        self._t_elapsed_s += dt_sim
 
     # ------------------------------------------------------------------
     # Métriques & snapshot

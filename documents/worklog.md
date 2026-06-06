@@ -357,3 +357,39 @@ Le projet est maintenant **100% couvert en tests (317/317 ✅) et logs 100% prop
 - Implémenter calcul coûts dans `simulation/energy.py` (énergie + PUE + tarif)
 - Ajouter endpoint API `/cluster/energy/projection?period=month|quarter|year`
 - Dashboard : onglet "Energy Cost" (graphes kWh/jour, PUE, €, projection)
+
+---
+
+## Phase 8.12 — Refonte architecture speed_multiplier
+
+**Date :** 6 juin 2026  
+**Contexte :** diagnostic approfondi des problèmes de simulation à vitesse élevée.
+
+### Diagnostic
+
+Deux bugs fondamentaux identifiés dans l'implémentation actuelle :
+
+1. **`dt_sim` croît avec `speed_multiplier`** : à 3600x, `dt_sim = 360s` → 3600 sous-pas thermiques par tick → crash asyncio par saturation CPU.
+
+2. **CPU throttle non branché** : `_throttle_interval_s` calculé à l'init mais jamais utilisé dans `run()`. La boucle tourne toujours à `tick_rate_hz=10Hz` fixe.
+
+### Spécification reconsidérée
+
+**Invariant :** `dt_sim = 1/tick_rate_hz = 0.1s` constant. La vitesse multiplie le nombre de ticks par seconde réelle, pas la taille du pas. La charge CPU reste identique à toutes les vitesses.
+
+### Plan de développement
+
+**Phase 8.12A — Correction boucle temps réel** :
+- `dt_sim` fixe = `1/tick_rate_hz`
+- CPU throttle branché : `asyncio.sleep(1/cpu_throttle_target_hz)`
+- `batch_size` ticks simulés par itération réelle = `round(speed × dt_real)`
+- Publier uniquement le dernier snapshot (pas tous les ticks calculés)
+- Message de commit : `fix(cluster): constant dt_sim, working CPU throttle, batch ticks`
+
+**Phase 8.12B — Script génération corpus ML** :
+- `scripts/generate_dataset.py` : boucle synchrone pure sans asyncio/MQTT
+- Export CSV et Parquet
+- Insert bulk TimescaleDB optionnel
+- CLI : `--scenario`, `--duration`, `--output`, `--format`
+- Performance cible : ~100k ticks/s → 1 mois de données en ~4 minutes
+- Message de commit : `feat(generate_dataset): batch ML corpus generation script`
