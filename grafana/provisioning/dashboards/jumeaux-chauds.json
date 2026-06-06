@@ -1,10 +1,10 @@
 {
   "title": "Jumeaux Chauds — Cluster Thermique",
   "uid": "jumeaux-chauds-v1",
-  "version": 1,
+  "version": 2,
   "schemaVersion": 38,
   "refresh": "10s",
-  "time": { "from": "now-7d", "to": "now" },
+  "time": { "from": "2005-01-01T00:00:00.000Z", "to": "now" },
   "tags": ["iot", "thermique", "mqtt"],
   "panels": [
     {
@@ -64,7 +64,7 @@
       "id": 2,
       "title": "Puissance totale du cluster (W)",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 7 },
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
       "targets": [
         {
           "datasource": { "type": "postgres" },
@@ -78,42 +78,77 @@
       "id": 3,
       "title": "Répartition des machines par statut",
       "type": "piechart",
-      "gridPos": { "x": 12, "y": 16, "w": 6, "h": 7 },
+      "gridPos": { "x": 0, "y": 24, "w": 8, "h": 8 },
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT status AS metric, COUNT(*) AS value FROM (SELECT DISTINCT ON (machine_id) machine_id, status FROM telemetry WHERE $__timeFilter(ts) ORDER BY machine_id, ts DESC) latest GROUP BY status",
+          "rawSql": "WITH latest AS (SELECT DISTINCT ON (machine_id) machine_id, status FROM telemetry ORDER BY machine_id, ts DESC) SELECT COUNT(*) FILTER (WHERE status = 'on') AS \"ON (allumées)\", COUNT(*) FILTER (WHERE status = 'degraded') AS \"DEGRADED (dégradées)\", COUNT(*) FILTER (WHERE status = 'off') AS \"OFF (éteintes)\" FROM latest",
           "format": "table"
         }
       ],
       "fieldConfig": {
         "overrides": [
-          { "matcher": { "id": "byName", "options": "on" },
+          { "matcher": { "id": "byName", "options": "ON (allumées)" },
             "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#27ae60" } }] },
-          { "matcher": { "id": "byName", "options": "degraded" },
+          { "matcher": { "id": "byName", "options": "DEGRADED (dégradées)" },
             "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#e67e22" } }] },
-          { "matcher": { "id": "byName", "options": "off" },
+          { "matcher": { "id": "byName", "options": "OFF (éteintes)" },
             "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#95a5a6" } }] }
         ]
       },
       "options": {
         "pieType": "pie",
-        "displayLabels": ["name", "value"],
-        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] }
+        "displayLabels": ["name", "value", "percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "values": ["value", "percent"]
+        },
+        "tooltip": { "mode": "single" }
+      },
+      "transformations": []
+    },
+    {
+      "id": 6,
+      "title": "Pannes cumulées par type",
+      "type": "barchart",
+      "gridPos": { "x": 8, "y": 24, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "postgres" },
+          "rawSql": "WITH all_types(fault_type) AS (VALUES ('extinction par surchauffe'), ('dégradé par surchauffe'), ('fan_failure'), ('power_surge'), ('sensor_drift'), ('thermal_runaway'), ('network_glitch')), counts AS (SELECT payload->>'type' AS fault_type, COUNT(*) AS nb FROM events WHERE event_type = 'fault' AND $__timeFilter(ts) AND payload->>'type' IS NOT NULL GROUP BY payload->>'type' UNION ALL SELECT 'extinction par surchauffe', COUNT(*) FROM events WHERE event_type = 'status_change' AND $__timeFilter(ts) AND COALESCE(cause, payload->>'cause') = 'overheat' UNION ALL SELECT 'dégradé par surchauffe', COUNT(*) FROM events WHERE event_type = 'status_change' AND $__timeFilter(ts) AND COALESCE(cause, payload->>'cause') = 'overheat_partial') SELECT t.fault_type AS \"Type de panne\", COALESCE(SUM(c.nb), 0) AS \"Nombre\" FROM all_types t LEFT JOIN counts c ON c.fault_type = t.fault_type GROUP BY t.fault_type ORDER BY \"Nombre\" DESC",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short",
+          "min": 0
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" },
+        "xField": "Type de panne"
       }
     },
     {
       "id": 4,
       "title": "Pannes récentes",
       "type": "table",
-      "gridPos": { "x": 18, "y": 16, "w": 6, "h": 7 },
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 8 },
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT ts, machine_id, payload->>'type' AS fault_type FROM events WHERE event_type = 'fault' AND $__timeFilter(ts) ORDER BY ts DESC LIMIT 20",
+          "rawSql": "SELECT ts AS \"Horodatage\", machine_id AS \"Machine\", payload->>'type' AS \"Type\", '⚙️ panne matérielle' AS \"Catégorie\" FROM events WHERE event_type = 'fault' AND $__timeFilter(ts) UNION ALL SELECT ts, machine_id, 'extinction par surchauffe', '🌡️ thermique' FROM events WHERE event_type = 'status_change' AND $__timeFilter(ts) AND COALESCE(cause, payload->>'cause') = 'overheat' UNION ALL SELECT ts, machine_id, 'dégradé par surchauffe', '🌡️ thermique' FROM events WHERE event_type = 'status_change' AND $__timeFilter(ts) AND COALESCE(cause, payload->>'cause') = 'overheat_partial' ORDER BY \"Horodatage\" DESC LIMIT 30",
           "format": "table"
         }
-      ]
+      ],
+      "options": {
+        "sortBy": [{ "displayName": "Horodatage", "desc": true }]
+      }
     }
   ]
 }

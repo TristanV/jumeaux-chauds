@@ -26,5 +26,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 filterwarnings = [
-    "ignore::pytest.PytestUnraisableExceptionWarning:aiomqtt",
+    # aiomqtt/__del__ tente loop.remove_writer() sur une boucle fermée en teardown de test.
+    # N'affecte pas le code de production (boucle asyncio toujours active en runtime).
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]

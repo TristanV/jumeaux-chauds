@@ -271,6 +271,8 @@ class ClusterSimulator:
             load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
 
             # Tick de chaque machine (avec temps simulé accéléré)
+            # Capturer les statuts AVANT le tick pour détecter les transitions
+            pre_tick_statuses = {mid: m.status for mid, m in self.machines.items()}
             for machine in self.machines.values():
                 machine.tick(load_factor=load_factor, dt=dt_simulated)
 
@@ -279,6 +281,22 @@ class ClusterSimulator:
 
             # Mise à jour des métriques agrégées
             self._update_metrics()
+
+            # ---- Détection immédiate des transitions de statut (QoS 1) ----
+            # Publié à chaque tick (pas seulement à ticks_per_event) pour éviter
+            # que last_status_cause soit écrasé par une transition ultérieure.
+            if publisher is not None:
+                ts_status = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
+                for machine in self.machines.values():
+                    mid = machine.id
+                    current_status = machine.status
+                    if pre_tick_statuses.get(mid) != current_status:
+                        self._prev_status[mid] = current_status
+                        await publisher.publish_status(
+                            self.cluster_id, mid, current_status,
+                            cause=machine.last_status_cause,
+                            ts=ts_status,
+                        )
 
             # ---- Publications MQTT --------------------------------
             if publisher is not None:
@@ -325,17 +343,10 @@ class ClusterSimulator:
 
                 await publisher.publish_telemetry(snap)
 
-                # Changement de statut ?
+                # Note : la détection des changements de statut est gérée dans la
+                # boucle principale (avant _publish_tick) pour capturer last_status_cause
+                # immédiatement après machine.tick(), évitant qu'il soit écrasé.
                 mid = machine.id
-                current_status = snap.get("status", "")
-                if self._prev_status.get(mid) != current_status:
-                    self._prev_status[mid] = current_status
-                    ts_status = get_simulated_time_iso(self._start_time, self._t_elapsed_s)
-                    await publisher.publish_status(
-                        self.cluster_id, mid, current_status,
-                        cause=machine.last_status_cause,
-                        ts=ts_status,
-                    )
 
                 # Changement d'état des fans ?
                 current_fans = snap.get("fans", [])
