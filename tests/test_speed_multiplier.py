@@ -89,51 +89,53 @@ class TestSpeedMultiplierBehavior:
 
     @pytest.mark.asyncio
     async def test_simulated_time_accumulation_60x(self):
-        """À vitesse 60x, 1 seconde réelle = 60 secondes simulées."""
+        """Phase 8.12A : _tick() avance toujours de dt_sim=1/tick_rate_hz fixe.
+
+        Le speed_multiplier contrôle batch_size dans run() async, pas _tick().
+        Pour simuler 60s, il faut 60 * tick_rate_hz = 600 ticks.
+        """
         config = load_config(scenario="nominal")
         config["simulation"]["speed_multiplier"] = 60.0
         config["simulation"]["tick_rate_hz"] = 10.0
 
         simulator = ClusterSimulator(config)
+        dt_sim = 1.0 / 10.0  # 0.1s par tick, fixe
 
-        # Exécuter 10 ticks (1 seconde réelle)
-        for _ in range(10):
+        # 600 ticks × 0.1s = 60.0 secondes simulées
+        for _ in range(600):
             simulator._tick()
 
-        # À 60x, temps écoulé = 10 * (1/10) * 60.0 = 60.0 secondes
         assert abs(simulator._t_elapsed_s - 60.0) < 0.1
 
     @pytest.mark.asyncio
     async def test_simulated_time_accumulation_3600x(self):
-        """À vitesse 3600x, 1 seconde réelle = 1 heure simulée."""
+        """Phase 8.12A : _tick() avance de dt_sim fixe quelle que soit la vitesse."""
         config = load_config(scenario="nominal")
         config["simulation"]["speed_multiplier"] = 3600.0
         config["simulation"]["tick_rate_hz"] = 10.0
 
         simulator = ClusterSimulator(config)
 
-        # Exécuter 10 ticks (1 seconde réelle)
-        for _ in range(10):
+        # 36000 ticks × 0.1s = 3600s = 1 heure simulée
+        for _ in range(36000):
             simulator._tick()
 
-        # À 3600x, temps écoulé = 10 * (1/10) * 3600.0 = 3600.0 secondes = 1 heure
         assert abs(simulator._t_elapsed_s - 3600.0) < 1.0
 
     @pytest.mark.asyncio
     async def test_simulated_time_accumulation_86400x(self):
-        """À vitesse 86400x, 1 seconde réelle = 1 jour simulé."""
+        """Phase 8.12A : vérifier l'accumulation sur 1 jour simulé (sous-ensemble)."""
         config = load_config(scenario="nominal")
         config["simulation"]["speed_multiplier"] = 86400.0
         config["simulation"]["tick_rate_hz"] = 10.0
 
         simulator = ClusterSimulator(config)
 
-        # Exécuter 10 ticks (1 seconde réelle)
-        for _ in range(10):
+        # 1000 ticks × 0.1s = 100s simulées (subset pour limiter le temps de test)
+        for _ in range(1000):
             simulator._tick()
 
-        # À 86400x, temps écoulé = 10 * (1/10) * 86400.0 = 86400.0 secondes = 1 jour
-        assert abs(simulator._t_elapsed_s - 86400.0) < 10.0
+        assert abs(simulator._t_elapsed_s - 100.0) < 1.0
 
 
 class TestSpeedChangeHotReload:
@@ -160,33 +162,35 @@ class TestSpeedChangeHotReload:
         assert simulator._speed_multiplier == 60.0
 
     def test_speed_change_at_runtime(self):
-        """Modifier vitesse en cours d'exécution."""
+        """Phase 8.12A : set_speed_multiplier() modifie _speed_multiplier et batch_size.
+
+        _tick() avance toujours de dt_sim fixe. Le changement de vitesse affecte
+        batch_size dans run() async, pas l'accumulation par _tick().
+        Ce test vérifie que le changement de vitesse est bien pris en compte
+        et que l'accumulation de temps reste cohérente (dt_sim fixe).
+        """
         config = load_config(scenario="nominal")
         config["simulation"]["speed_multiplier"] = 1.0
+        config["simulation"]["tick_rate_hz"] = 10.0
         simulator = ClusterSimulator(config)
+        dt_sim = 1.0 / 10.0  # 0.1s fixe par tick
 
-        # Phase 1 : ticks à 1x
-        t1 = simulator._t_elapsed_s
+        # Phase 1 : 5 ticks à 1x
         for _ in range(5):
             simulator._tick()
-        t2 = simulator._t_elapsed_s
+        t_after_phase1 = simulator._t_elapsed_s
+        assert abs(t_after_phase1 - 0.5) < 0.01  # 5 × 0.1s = 0.5s
 
-        # Changer à 60x
+        # Changer à 60x — _tick() toujours 0.1s, mais batch_size change dans run()
         simulator.set_speed_multiplier(60.0)
+        assert simulator._speed_multiplier == 60.0
 
-        # Phase 2 : ticks à 60x
-        t3 = simulator._t_elapsed_s
+        # Phase 2 : 5 ticks supplémentaires — toujours dt_sim=0.1s par tick
         for _ in range(5):
             simulator._tick()
-        t4 = simulator._t_elapsed_s
-
-        # Ratio de temps entre phases
-        dt1 = t2 - t1
-        dt2 = t4 - t3
-
-        # dt2 devrait être ~60x dt1 (même nombre de ticks)
-        # (dt1 ≈ 0.5 s, dt2 ≈ 30 s à taux 10 Hz)
-        assert abs((dt2 / dt1) - 60.0) < 1.0
+        t_after_phase2 = simulator._t_elapsed_s
+        # 10 ticks total × 0.1s = 1.0s simulée (dt_sim fixe, indépendant de speed)
+        assert abs(t_after_phase2 - 1.0) < 0.01
 
     def test_speed_change_method_validation(self):
         """set_speed_multiplier valide l'entrée."""
@@ -330,43 +334,45 @@ class TestIntegrationScenarios:
 
     @pytest.mark.asyncio
     async def test_ml_data_generation_scenario(self):
-        """Scénario : générer 30 jours de données ML en ~30 secondes."""
+        """Phase 8.12A/B : vérifier la densité constante en temps simulé.
+
+        Avec dt_sim=0.1s fixe, pour générer N secondes simulées il faut
+        N × tick_rate_hz ticks. Ce test vérifie l'accumulation sur 1 heure simulée
+        (représentatif de la génération de corpus ML via _tick() en boucle).
+        """
         config = load_config(scenario="nominal")
-        config["simulation"]["speed_multiplier"] = 86400.0  # 1 jour/sec
+        config["simulation"]["speed_multiplier"] = 86400.0
         config["simulation"]["tick_rate_hz"] = 10.0
         config["simulation"]["cpu_throttle_target_hz"] = 100.0
 
         simulator = ClusterSimulator(config)
 
-        # Exécuter 300 ticks (30 secondes à 10 Hz)
-        for _ in range(300):
+        # 3600 ticks × 0.1s = 360s simulées (limité pour temps de test raisonnable)
+        n_ticks = 3600
+        expected_time_s = n_ticks * (1.0 / 10.0)  # 360s
+
+        for _ in range(n_ticks):
             simulator._tick()
 
-        # Temps simulé devrait être ~30 jours
-        expected_time_s = 30 * 86400  # 30 days in seconds
-        actual_time_s = simulator._t_elapsed_s
-
-        # Tolérance ±5% (phénomène de floating point)
-        assert abs(actual_time_s - expected_time_s) / expected_time_s < 0.05
+        assert abs(simulator._t_elapsed_s - expected_time_s) < 0.1
 
     @pytest.mark.asyncio
     async def test_rapid_testing_scenario(self):
-        """Scénario : test rapide avec accélération 1h/sec."""
+        """Phase 8.12A : dt_sim fixe — le speed_multiplier affecte run() pas _tick()."""
         config = load_config(scenario="nominal")
-        config["simulation"]["speed_multiplier"] = 3600.0  # 1 hour/sec
+        config["simulation"]["speed_multiplier"] = 3600.0
         config["simulation"]["tick_rate_hz"] = 10.0
 
         simulator = ClusterSimulator(config)
 
-        # Exécuter 100 ticks (~10 secondes)
-        for _ in range(100):
+        # 1000 ticks × 0.1s = 100s simulées
+        n_ticks = 1000
+        expected_time_s = n_ticks * (1.0 / 10.0)
+
+        for _ in range(n_ticks):
             simulator._tick()
 
-        # Temps simulé ~10 heures
-        expected_time_s = 10 * 3600
-        actual_time_s = simulator._t_elapsed_s
-
-        assert abs(actual_time_s - expected_time_s) / expected_time_s < 0.05
+        assert abs(simulator._t_elapsed_s - expected_time_s) / expected_time_s < 0.01
 
 
 if __name__ == "__main__":

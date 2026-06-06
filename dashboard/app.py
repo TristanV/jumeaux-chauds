@@ -776,5 +776,6 @@ def main() -> None:
     _auto_refresh()
 
 
-if __name__ == "__main__":
-    main()
+# Streamlit exécute ce fichier comme un script — main() doit être appelé
+# directement au niveau module, pas seulement sous __name__ == "__main__".
+main()

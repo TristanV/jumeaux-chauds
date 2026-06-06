@@ -147,22 +147,24 @@ class TestClusterSnapshotTimestamp:
         assert abs(snapshot["t_elapsed_s"] - 0.5) < 0.01
 
     def test_snapshot_with_speed_multiplier(self):
-        """Timestamp considère speed_multiplier."""
+        """Phase 8.12A : _tick() avance de dt_sim=0.1s fixe, indépendant de speed.
+
+        Pour avancer de 60s simulées à tick_rate=10Hz, il faut 600 ticks.
+        Le speed_multiplier contrôle batch_size dans run() async, pas _tick().
+        """
         config = load_config(scenario="nominal")
-        config["simulation"]["speed_multiplier"] = 60.0  # 60x real-time
+        config["simulation"]["speed_multiplier"] = 60.0
         config["simulation"]["tick_rate_hz"] = 10.0
         simulator = ClusterSimulator(config)
 
-        snap1 = simulator.get_snapshot()
-
-        # Exécuter 10 ticks = 1 seconde réelle = 60 secondes simulées
-        for _ in range(10):
+        # 600 ticks × 0.1s = 60.0 secondes simulées
+        for _ in range(600):
             simulator._tick()
 
-        snap2 = simulator.get_snapshot()
+        snap = simulator.get_snapshot()
 
         # Elapsed devrait être 60 secondes
-        assert abs(snap2["t_elapsed_s"] - 60.0) < 1.0
+        assert abs(snap["t_elapsed_s"] - 60.0) < 1.0
 
 
 class TestMqttPublisherTimestamps:

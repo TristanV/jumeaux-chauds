@@ -4,7 +4,7 @@
   "version": 2,
   "schemaVersion": 38,
   "refresh": "10s",
-  "time": { "from": "2005-01-01T00:00:00.000Z", "to": "now" },
+  "time": { "from": "2005-01-01T00:00:00.000Z", "to": "2100-01-01T00:00:00.000Z" },
   "tags": ["iot", "thermique", "mqtt"],
   "panels": [
     {
@@ -15,7 +15,7 @@
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT ts AS time, machine_id AS metric, temperature_c AS value FROM telemetry WHERE $__timeFilter(ts) AND temperature_c IS NOT NULL ORDER BY ts, machine_id",
+          "rawSql": "SELECT ts AS time, machine_id AS metric, temperature_c AS value FROM telemetry WHERE $__timeFilter(ts) AND temperature_c IS NOT NULL ORDER BY ts ASC, machine_id",
           "format": "time_series"
         }
       ],
@@ -41,7 +41,7 @@
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT ts AS time, machine_id AS metric, fan_rpm_avg AS value FROM telemetry WHERE $__timeFilter(ts) AND fan_rpm_avg IS NOT NULL ORDER BY ts, machine_id",
+          "rawSql": "SELECT ts AS time, machine_id AS metric, fan_rpm_avg AS value FROM telemetry WHERE $__timeFilter(ts) AND fan_rpm_avg IS NOT NULL ORDER BY ts ASC, machine_id",
           "format": "time_series"
         }
       ],
@@ -68,7 +68,7 @@
       "targets": [
         {
           "datasource": { "type": "postgres" },
-          "rawSql": "SELECT ts AS time, 'cluster' AS metric, SUM(power_w) AS value FROM telemetry WHERE $__timeFilter(ts) AND power_w IS NOT NULL GROUP BY ts ORDER BY ts",
+          "rawSql": "SELECT ts AS time, 'cluster' AS metric, SUM(power_w) AS value FROM telemetry WHERE $__timeFilter(ts) AND power_w IS NOT NULL GROUP BY ts ORDER BY ts ASC",
           "format": "time_series"
         }
       ],

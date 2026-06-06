@@ -40,6 +40,7 @@ class ActiveFault:
     fault_type: str
     remaining_s: float
     magnitude: float
+    fault_id: str = ""  # Identifiant unique pour éviter les doublons dans _published_faults
 
 
 @dataclass
@@ -181,12 +182,13 @@ class MachineSimulator:
         L'interprétation précise de `fault_type` et `magnitude` est laissée
         au `tick()`, qui applique les effets (ex: fan_failure, power_surge...).
         """
-
+        import uuid
         self.faults.append(
             ActiveFault(
                 fault_type=fault_type,
                 remaining_s=max(0.0, duration_s),
                 magnitude=magnitude,
+                fault_id=str(uuid.uuid4()),
             )
         )
 
@@ -419,6 +421,7 @@ class MachineSimulator:
                 "type": fault.fault_type,
                 "remaining_s": max(0.0, fault.remaining_s),
                 "magnitude": fault.magnitude,
+                "fault_id": fault.fault_id,
             }
             for fault in self.faults
         ]

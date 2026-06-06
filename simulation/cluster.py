@@ -252,13 +252,11 @@ class ClusterSimulator:
         dt_sim = 1.0 / self._tick_rate_hz  # pas temporel fixe (0.1s simulé)
 
         # Cadence réelle de la boucle (CPU throttle enfin branché)
+        # dt_real_loop est fixe (ne dépend pas de speed_multiplier)
         if self._cpu_throttle_enabled:
             dt_real_loop = 1.0 / self._cpu_throttle_target_hz
         else:
             dt_real_loop = dt_sim  # fallback : même cadence que tick_rate
-
-        # Nombre de ticks simulés par itération réelle
-        batch_size = max(1, round(self._speed_multiplier * dt_real_loop * self._tick_rate_hz))
 
         # Timers publications périodiques (en ticks simulés cumulés)
         ticks_per_summary = max(1, round(5.0 * self._tick_rate_hz))
@@ -266,16 +264,19 @@ class ClusterSimulator:
         tick_counter: int = 0  # ticks simulés cumulés
 
         logger.info(
-            "run() — speed=%.1fx | dt_sim=%.3fs | throttle=%s@%.0fHz | batch=%d ticks/iter",
+            "run() — speed=%.1fx | dt_sim=%.3fs | throttle=%s@%.0fHz",
             self._speed_multiplier, dt_sim,
             "ON" if self._cpu_throttle_enabled else "OFF",
-            self._cpu_throttle_target_hz, batch_size,
+            self._cpu_throttle_target_hz,
         )
 
         while self._running:
             await asyncio.sleep(dt_real_loop)
 
             # ── Batch de ticks simulés ──────────────────────────────────
+            # batch_size recalculé à chaque itération pour prendre en compte
+            # les changements de vitesse à chaud via set_speed_multiplier()
+            batch_size = max(1, round(self._speed_multiplier * dt_real_loop * self._tick_rate_hz))
             status_transitions: list[tuple[str, str, str]] = []
 
             for _ in range(batch_size):
@@ -375,7 +376,7 @@ class ClusterSimulator:
 
                 # Panne active ?
                 for fault in snap.get("faults", []):
-                    fault_key = f"{mid}:{fault.get('type')}:{fault.get('ts_start')}"
+                    fault_key = f"{mid}:{fault.get('type')}:{fault.get('fault_id')}"
                     if not hasattr(self, "_published_faults"):
                         self._published_faults: set[str] = set()
                     if fault_key not in self._published_faults:
