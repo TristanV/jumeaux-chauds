@@ -4,14 +4,31 @@ simulation:
   events_per_sec: 2.0
   duration: "0"
 
+  # Phase 8.14 : composite_stress remplace ramp_with_spikes
+  # Profil haute fidélité combinant :
+  #   1. Cycles journaliers/hebdomadaires (charge de fond réaliste)
+  #   2. Dérive progressive bornée (montée en charge sur plusieurs heures)
+  #   3. Spikes stochastiques fréquents (incidents, bursts)
+  #   4. Texture fine Perlin (variabilité instantanée)
   load_profile:
-    type: "ramp_with_spikes"
-    ramp_start: 0.20
-    ramp_end: 0.95
-    ramp_duration_s: 600.0
-    spike_probability: 0.02
-    spike_duration_s: 30.0
-    spike_magnitude: 0.30
+    type: "composite_stress"
+    base_load: 0.55
+    # Cycles temporels
+    daily_amplitude: 0.18
+    daily_period_s: 86400.0
+    daily_phase_s: -21600.0
+    weekly_amplitude: 0.08
+    weekly_period_s: 604800.0
+    # Dérive thermique progressive (+25% sur ~12 500s simulées)
+    drift_rate: 2.0e-5
+    drift_max: 0.25
+    # Spikes d'incident (~0.5% de chance par tick)
+    spike_probability: 0.005
+    spike_magnitude: 0.25
+    # Texture Perlin fine
+    perlin_scale: 0.0003
+    perlin_amplitude: 0.08
+    perlin_octaves: 3
 
   noise:
     enabled: true

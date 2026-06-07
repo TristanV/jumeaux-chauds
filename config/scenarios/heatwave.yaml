@@ -4,11 +4,24 @@ simulation:
   events_per_sec: 1.0
   duration: "0"
 
+  # Phase 8.14 : multi_scale_sine avec charge de base élevée
+  # Simule un datacenter en période de chaleur :
+  # - charge de fond plus élevée (refroidissement sollicité en permanence)
+  # - cycles réalistes journaliers/hebdomadaires
+  # - bruit plus élevé (comportement instable sous stress thermique)
   load_profile:
-    type: "sine_wave"
-    base_load: 0.55
-    amplitude: 0.30
-    period_s: 600.0
+    type: "multi_scale_sine"
+    base_load: 0.58
+    fast_amplitude: 0.10
+    fast_period_s: 3600.0
+    fast_phase_s: -1800.0
+    daily_amplitude: 0.22            # pics de charge journaliers plus marqués
+    daily_period_s: 86400.0
+    daily_phase_s: -25200.0          # pic en milieu d'après-midi (14h)
+    weekly_amplitude: 0.06
+    weekly_period_s: 604800.0
+    weekly_phase_s: 0.0
+    noise_std: 0.04                  # plus de variabilité sous chaleur
 
   noise:
     enabled: true
@@ -17,7 +30,7 @@ simulation:
     spike_magnitude_c: 3.0
     drift:
       enabled: true
-      rate_c_per_s: 0.0001
+      rate_c_per_s: 0.0001           # dérive thermique ambiante progressive
 
   fault_injection:
     enabled: true

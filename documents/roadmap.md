@@ -62,6 +62,9 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
   │   ├── 8.12A : Correction boucle temps réel (dt_sim fixe, CPU throttle, batch) ✅
   │   └── 8.12B : Script génération corpus ML (batch synchrone, CSV/Parquet) ✅
   ├── Étape 8.13 : Contrôle démarrage/pause/arrêt de simulation ✅
+  ├── Étape 8.14 : Bibliothèque de profils de charge réalistes ✅
+  │   ├── 8.14A : Nouveaux profils (multi_scale_sine, perlin_noise, markov_chain, composite_stress) ✅
+  │   └── 8.14B : Trace replay (dataset Bitbrains) ⏳
   ├── Étape 8.2 : Régulateur PID configurable ⏳
   └── Étape 8.3 : Coût électrique mensuel ⏳
 ```
@@ -146,6 +149,24 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
     - [x] 8.13.3 — api/routes/simulation.py : endpoints GET /status, POST /start, /pause, /resume, /stop
     - [x] 8.13.4 — docker-compose.yml : variable SIMULATION_AUTOSTART (défaut 0)
     - [x] 8.13.5 — dashboard/app.py : bandeau de contrôle rapide (▶ Démarrer / ⏸ Pause / ▶ Reprendre / ⏹ Arrêter / 🗑 Reset)
+  - [x] 8.14 — Bibliothèque de profils de charge réalistes ✅ (7 juin 2026)
+    - [x] 8.14A — Nouveaux profils de charge (simulation/scenarios.py) ✅
+      - [x] 8.14A.1 — multi_scale_sine : superposition de 3 sinusoïdes incommensurables (fast ~1h, daily ~24h, weekly ~7j) + bruit gaussien
+      - [x] 8.14A.2 — perlin_noise : bruit organique multifractal sans dépendance externe (pure numpy), sans motif apparent sur 5-6h simulées
+      - [x] 8.14A.3 — markov_chain : 4 états (idle/moderate/heavy/burst) avec matrice de transition configurable et temps de séjour exponentiels
+      - [x] 8.14A.4 — composite_stress : profil haute fidélité combinant cycles journaliers/hebdomadaires + dérive thermique progressive bornée + spikes stochastiques + texture Perlin fine
+      - [x] 8.14A.5 — config/scenarios/basic.yaml : scénario pédagogique sine_wave pur (base référence, aucune panne)
+      - [x] 8.14A.6 — config/scenarios/nominal.yaml : migré vers multi_scale_sine (charge réaliste datacenter)
+      - [x] 8.14A.7 — config/scenarios/heatwave.yaml : migré vers multi_scale_sine (base élevée + cycles marqués)
+      - [x] 8.14A.8 — config/scenarios/busy_weeks.yaml : migré vers perlin_noise (charge organique non répétitive)
+      - [x] 8.14A.9 — config/scenarios/stress.yaml : migré vers composite_stress (charge haute fidélité + pannes)
+      - [x] 8.14A.10 — tests/test_load_profiles.py : 37 tests (Perlin1D, multi_scale_sine, perlin_noise, markov_chain, composite_stress, rétrocompatibilité, borne [0,1])
+      - [x] 8.14A.11 — tests/test_machine_yaml_integration.py : 5 tests YAML mis à jour (basic, nominal, stress, busy_weeks, heatwave)
+    - [ ] 8.14B — Trace replay (dataset Bitbrains) ⏳
+      - [ ] Téléchargement et intégration dataset Bitbrains FastStorage (~30 MB) dans data/traces/
+      - [ ] Profil trace_replay dans ScenarioEngine (lecture CSV, interpolation temporelle)
+      - [ ] config/scenarios/trace_replay.yaml avec sélecteur de trace
+      - [ ] generate_dataset.py : export formaté rejouable comme trace
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
@@ -153,9 +174,9 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 
 ## Prochaine priorité recommandée
 
-La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
+La prochaine étape de développement recommandée est **la Phase 8.14B — Trace replay** (embarquement du dataset Bitbrains + profil `trace_replay`), puis **la Phase 8.2 — Régulateur PID configurable**.
 
-> **État au 7 juin 2026 :** Phase 8.13 complète — contrôle start/pause/stop de simulation depuis l'API et le dashboard Streamlit. Simulation désactivée par défaut au lancement Docker (SIMULATION_AUTOSTART=0).
+> **État au 7 juin 2026 :** Phase 8.14A complète — bibliothèque de 4 nouveaux profils de charge réalistes (multi_scale_sine, perlin_noise, markov_chain, composite_stress). Scénarios nominal, heatwave, busy_weeks, stress migrés. Nouveau scénario basic (baseline pédagogique). 37 nouveaux tests de profils.
 
 ### Contexte Phase 8.12 — Pourquoi cette refonte
 

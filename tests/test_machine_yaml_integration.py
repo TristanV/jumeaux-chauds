@@ -33,7 +33,7 @@ class TestYamlLoading:
         cfg = load_config(scenario="stress")
 
         assert cfg.simulation.mode == "stress"
-        assert cfg.simulation.load_profile.type == "ramp_with_spikes"
+        assert cfg.simulation.load_profile.type == "composite_stress"  # Phase 8.14
         assert cfg.simulation.fault_injection.enabled is True
 
     def test_scenario_fallback_to_nominal(self) -> None:
@@ -369,26 +369,52 @@ class TestFaultInjectionConfig:
 class TestLoadProfileConfig:
     """Tests de la configuration des profils de charge."""
 
-    def test_nominal_sine_wave_profile(self) -> None:
-        """Vérifie que nominal utilise une onde sinusoïdale."""
+    def test_nominal_multi_scale_sine_profile(self) -> None:
+        """Vérifie que nominal utilise multi_scale_sine (Phase 8.14)."""
         cfg = load_config("nominal")
 
         lp = cfg.simulation.load_profile
-        assert lp.type == "sine_wave"
-        assert lp.base_load == 0.35
-        assert lp.amplitude == 0.20
-        assert lp.period_s == 300.0
+        assert lp.type == "multi_scale_sine"
+        assert lp.base_load == pytest.approx(0.38)
+        assert lp.daily_amplitude == pytest.approx(0.15)
+        assert lp.daily_period_s == pytest.approx(86400.0)
 
-    def test_stress_ramp_with_spikes_profile(self) -> None:
-        """Vérifie que stress utilise une rampe avec spikes."""
+    def test_basic_sine_wave_profile(self) -> None:
+        """Vérifie que basic conserve sine_wave (Phase 8.14)."""
+        cfg = load_config("basic")
+
+        lp = cfg.simulation.load_profile
+        assert lp.type == "sine_wave"
+        assert lp.base_load == pytest.approx(0.35)
+        assert lp.amplitude == pytest.approx(0.20)
+        assert lp.period_s == pytest.approx(300.0)
+
+    def test_stress_composite_stress_profile(self) -> None:
+        """Vérifie que stress utilise composite_stress (Phase 8.14)."""
         cfg = load_config("stress")
 
         lp = cfg.simulation.load_profile
-        assert lp.type == "ramp_with_spikes"
-        assert lp.ramp_start == 0.20
-        assert lp.ramp_end == 0.95
-        assert lp.ramp_duration_s == 600.0
-        assert lp.spike_probability == 0.02
+        assert lp.type == "composite_stress"
+        assert lp.base_load == pytest.approx(0.55)
+        assert lp.spike_probability == pytest.approx(0.005)
+        assert lp.drift_max == pytest.approx(0.25)
+
+    def test_busy_weeks_perlin_noise_profile(self) -> None:
+        """Vérifie que busy_weeks utilise perlin_noise (Phase 8.14)."""
+        cfg = load_config("busy_weeks")
+
+        lp = cfg.simulation.load_profile
+        assert lp.type == "perlin_noise"
+        assert lp.base_load == pytest.approx(0.48)
+        assert lp.n_octaves == 5
+
+    def test_heatwave_multi_scale_sine_profile(self) -> None:
+        """Vérifie que heatwave utilise multi_scale_sine (Phase 8.14)."""
+        cfg = load_config("heatwave")
+
+        lp = cfg.simulation.load_profile
+        assert lp.type == "multi_scale_sine"
+        assert lp.base_load == pytest.approx(0.58)
 
 
 class TestMQTTConfiguration:

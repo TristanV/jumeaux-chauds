@@ -1,0 +1,28 @@
+simulation:
+  mode: "basic"
+  tick_rate_hz: 10.0
+  events_per_sec: 1.0
+  duration: "0"
+
+  # Profil sine_wave pur : charge oscillant entre 15% et 55%
+  # Période courte (5 min simulées) → idéal pour une démo rapide
+  # Utiliser ce scénario pour introduire les concepts de base
+  load_profile:
+    type: "sine_wave"
+    base_load: 0.35
+    amplitude: 0.20
+    period_s: 300.0              # 5 min simulées
+
+  noise:
+    enabled: true
+    temperature_std_c: 0.2
+    spike_probability: 0.001
+    spike_magnitude_c: 1.0
+    drift:
+      enabled: false
+      rate_c_per_s: 0.0
+
+  fault_injection:
+    enabled: false
+    faults: []
+    recovery_delay_s: 120.0

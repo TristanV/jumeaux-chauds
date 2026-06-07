@@ -5,16 +5,30 @@ simulation:
   duration: "0"                      # "0" = infini ; "1h30m" = durée finie
 
   # Note: speed_multiplier est maintenant défini dans base.yaml (configuration globale)
-  # Les scénarios n'héritent plus leur propre speed_multiplier mais utilisent celui de base.yaml
 
-  cpu_throttle_enabled: true         # limiter fréquence réelle de publication
-  cpu_throttle_target_hz: 100.0      # ~100 ticks réels/s max (50-500 Hz possible)
+  cpu_throttle_enabled: true
+  cpu_throttle_target_hz: 100.0
 
+  # Phase 8.14 : multi_scale_sine remplace sine_wave
+  # Superposition de 3 cycles (rapide/journalier/hebdo) + bruit résiduel
+  # → charge plus réaliste, pas de répétition visible à courte échelle
   load_profile:
-    type: "sine_wave"
-    base_load: 0.35
-    amplitude: 0.20
-    period_s: 300.0
+    type: "multi_scale_sine"
+    base_load: 0.38
+    # Fluctuations intra-horaires (crons, batch courts)
+    fast_amplitude: 0.08
+    fast_period_s: 3600.0            # 1h simulée
+    fast_phase_s: -900.0
+    # Pic de milieu de journée
+    daily_amplitude: 0.15
+    daily_period_s: 86400.0          # 24h simulées
+    daily_phase_s: -21600.0          # pic à midi (départ 6h)
+    # Weekend calme
+    weekly_amplitude: 0.07
+    weekly_period_s: 604800.0        # 7 jours simulés
+    weekly_phase_s: 0.0
+    # Bruit résiduel (variabilité instantanée)
+    noise_std: 0.02
 
   noise:
     enabled: true

@@ -260,25 +260,79 @@ cluster:
       role: "worker"
 ```
 
-### 4.2 `config/scenarios/nominal.yaml`
+### 4.2 Bibliothèque de profils de charge (Phase 8.14)
+
+`ScenarioEngine` supporte 6 profils de charge sélectionnables via `load_profile.type` :
+
+| Type | Description | Paramètres clés |
+|------|-------------|----------------|
+| `sine_wave` | Sinusoïde pure — référence pédagogique | `base_load`, `amplitude`, `period_s` |
+| `ramp_with_spikes` | Montée progressive + spikes aléatoires | `ramp_start`, `ramp_end`, `ramp_duration_s`, `spike_probability` |
+| `constant` | Charge fixe | `base_load` |
+| `step` | Échelon à `step_time_s` | `base_load`, `step_load`, `step_time_s` |
+| `multi_scale_sine` | Superposition horaire + journalière + hebdomadaire + bruit | `base_load`, `fast_amplitude/period_s`, `daily_amplitude/period_s`, `weekly_amplitude/period_s`, `noise_std` |
+| `perlin_noise` | Bruit Perlin multifractal — charge organique non répétitive | `base_load`, `amplitude`, `scale`, `n_octaves`, `persistence`, `drift_rate`, `drift_max` |
+| `markov_chain` | Chaîne de Markov 4 états : idle / moderate / heavy / burst | `state_loads`, `transition_matrix`, `mean_dwell_s`, `noise_std` |
+| `composite_stress` | Cycles + dérive thermique bornée + spikes incidents + texture Perlin | `base_load`, `daily_amplitude`, `drift_rate`, `drift_max`, `spike_probability`, `spike_magnitude`, `perlin_scale`, `perlin_amplitude`, `perlin_octaves` |
+
+**Note d'implémentation :** `_Perlin1D` est implémenté en pure numpy dans `simulation/scenarios.py` — aucune dépendance externe.
+
+### 4.3 `config/scenarios/basic.yaml` (baseline pédagogique)
+
+```yaml
+simulation:
+  mode: "basic"
+  tick_rate_hz: 10.0
+  events_per_sec: 1.0
+  duration: "0"
+
+  load_profile:
+    type: "sine_wave"        # Référence pédagogique — motif périodique simple
+    base_load: 0.35
+    amplitude: 0.20
+    period_s: 300.0          # 5 min — visible en quelques minutes de simulation
+
+  noise:
+    enabled: true
+    temperature_std_c: 0.3
+    spike_probability: 0.001
+    spike_magnitude_c: 1.5
+    drift:
+      enabled: false
+
+  fault_injection:
+    enabled: false           # Aucune panne — baseline pure
+```
+
+### 4.4 `config/scenarios/nominal.yaml`
 
 ```yaml
 simulation:
   mode: "nominal"
   tick_rate_hz: 10.0
   events_per_sec: 1.0
-  duration: "0"                      # "0" = infini ; "1h30m" = durée finie
+  duration: "0"
 
+  # Phase 8.14 : multi_scale_sine remplace sine_wave
+  # 3 sinusoïdes incommensurables → aucun motif apparent sur < 1 semaine simulée
   load_profile:
-    type: "sine_wave"
-    base_load: 0.35
-    amplitude: 0.20
-    period_s: 300.0
+    type: "multi_scale_sine"
+    base_load: 0.38
+    fast_amplitude: 0.08
+    fast_period_s: 3600.0       # cycle horaire (refroidissement, cycles CPU)
+    fast_phase_s: -1800.0
+    daily_amplitude: 0.15
+    daily_period_s: 86400.0     # cycle journalier (rush hours)
+    daily_phase_s: -28800.0     # pic à 8h
+    weekly_amplitude: 0.07
+    weekly_period_s: 604800.0   # cycle hebdomadaire (weekday/weekend)
+    weekly_phase_s: 0.0
+    noise_std: 0.02
 
   noise:
     enabled: true
+    temperature_std_c: 0.3
     spike_probability: 0.002
-    spike_magnitude_c: 2.0
     drift:
       enabled: false
 
@@ -286,7 +340,7 @@ simulation:
     enabled: false
 ```
 
-### 4.3 `config/scenarios/stress.yaml`
+### 4.5 `config/scenarios/stress.yaml`
 
 ```yaml
 simulation:
@@ -295,19 +349,27 @@ simulation:
   events_per_sec: 2.0
   duration: "0"
 
+  # Phase 8.14 : composite_stress — profil haute fidélité
   load_profile:
-    type: "ramp_with_spikes"
-    ramp_start: 0.20
-    ramp_end: 0.95
-    ramp_duration_s: 600.0
-    spike_probability: 0.02
-    spike_duration_s: 30.0
-    spike_magnitude: 0.30
+    type: "composite_stress"
+    base_load: 0.55
+    daily_amplitude: 0.18
+    daily_period_s: 86400.0
+    daily_phase_s: -21600.0
+    weekly_amplitude: 0.08
+    weekly_period_s: 604800.0
+    drift_rate: 2.0e-5          # +25% sur ~12 500s simulées
+    drift_max: 0.25
+    spike_probability: 0.005    # ~0.5% de chance par tick
+    spike_magnitude: 0.25
+    perlin_scale: 0.0003
+    perlin_amplitude: 0.08
+    perlin_octaves: 3
 
   noise:
     enabled: true
+    temperature_std_c: 0.5
     spike_probability: 0.005
-    spike_magnitude_c: 5.0
     drift:
       enabled: true
       rate_c_per_s: 0.01
@@ -1118,23 +1180,71 @@ mosquitto_sub -h localhost -t "dt/cluster_alpha/+/fault" -v
 
 ### 14.4 Tableau des extensions Phase 8
 
-| Niveau | Domaine | Extension | Effort estimé |
-|---|---|---|---|
-| ⭐ | Config | Scénario **heatwave.yaml** : T_amb progressive, rush hours thermique | 3h |
-| ⭐ | Config | Scénario **busy_weeks.yaml** : cycles jour/semaine, rush hours | 3h |
-| ⭐ | MQTT | Observer MQTT Explorer / mosquitto_sub | 1h |
-| ⭐ | API | Tester tous les endpoints depuis `/docs` (OpenAPI auto-générée) | 1h |
-| ⭐⭐ | Dashboard | Ajouter un graphe candlestick OHLC sur `temp_cpu` (fenêtres 60s) | 4h |
-| ⭐⭐ | Physique | Remplacer le régulateur proportionnel par un **PID** configurable | 6h |
-| ⭐⭐ | Storage | Activer le profil `storage`, configurer un dashboard Grafana | 3h |
-| ⭐⭐ | Coût | Calculer la facture d'électricité mensuelle avec PUE réaliste | 3h |
-| ⭐⭐ | Config | Implémenter un 3ème niveau YAML par machine (surcharge totale) | 4h |
-| ⭐⭐⭐ | ML | Entraîner un modèle de **détection d'anomalie** (IsolationForest / PyOD) | 12h |
-| ⭐⭐⭐ | ML | Classifier `capteur_en_drift` vs `vraie_surchauffe` | 8h |
-| ⭐⭐⭐ | Stats | Estimer les paramètres Weibull (MLE) sur l'historique de pannes simulées | 6h |
-| ⭐⭐⭐ | RL | Entraîner un agent **Reinforcement Learning** pour optimiser les fans | 20h+ |
-| ⭐⭐⭐ | Archi | Ajouter un **command consumer MQTT** répondant aux topics `cmd/` | 6h |
-| ⭐⭐⭐ | MCP | Exposer l'API comme **outil MCP** pour un agent LLM de monitoring | 8h |
+| Niveau | Domaine | Extension | Statut | Effort |
+|---|---|---|---|---|
+| ⭐ | Config | Scénario **heatwave.yaml** : T_amb progressive, rush hours thermique | ✅ 8.1 | 3h |
+| ⭐ | Config | Scénario **busy_weeks.yaml** : cycles jour/semaine, rush hours | ✅ 8.1 | 3h |
+| ⭐ | MQTT | Observer MQTT Explorer / mosquitto_sub | ✅ 8.1 | 1h |
+| ⭐ | API | Tester tous les endpoints depuis `/docs` (OpenAPI auto-générée) | ✅ 7.3 | 1h |
+| ⭐ | Config | Bibliothèque de profils de charge (`multi_scale_sine`, `perlin_noise`, `markov_chain`, `composite_stress`) | ✅ 8.14A | 8h |
+| ⭐⭐ | Config | Trace replay : rejouer une trace CSV temps réel (`trace_replay`) | ⏳ 8.14B | 4h |
+| ⭐⭐ | Dashboard | Ajouter un graphe candlestick OHLC sur `temp_cpu` (fenêtres 60s) | ⏳ | 4h |
+| ⭐⭐ | Physique | Remplacer le régulateur proportionnel par un **PID** configurable | ⏳ 8.2 | 6h |
+| ⭐⭐ | Storage | Activer le profil `storage`, configurer un dashboard Grafana | ✅ 6.3 | 3h |
+| ⭐⭐ | Coût | Calculer la facture d'électricité mensuelle avec PUE réaliste | ⏳ 8.3 | 3h |
+| ⭐⭐ | Config | Implémenter un 3ème niveau YAML par machine (surcharge totale) | ⏳ | 4h |
+| ⭐⭐⭐ | ML | Entraîner un modèle de **détection d'anomalie** (IsolationForest / PyOD) | ⏳ | 12h |
+| ⭐⭐⭐ | ML | Classifier `capteur_en_drift` vs `vraie_surchauffe` | ⏳ | 8h |
+| ⭐⭐⭐ | Stats | Estimer les paramètres Weibull (MLE) sur l'historique de pannes simulées | ⏳ | 6h |
+| ⭐⭐⭐ | RL | Entraîner un agent **Reinforcement Learning** pour optimiser les fans | ⏳ | 20h+ |
+| ⭐⭐⭐ | Archi | Ajouter un **command consumer MQTT** répondant aux topics `cmd/` | ⏳ | 6h |
+| ⭐⭐⭐ | MCP | Exposer l'API comme **outil MCP** pour un agent LLM de monitoring | ⏳ | 8h |
+
+### 14.6 Bibliothèque de profils de charge — Phase 8.14
+
+#### Motivation
+
+Le profil `sine_wave` génère un signal strictement périodique : un algorithme de maintenance prédictive peut sur-apprendre ce motif et produire des métriques de précision artificiellement élevées. Les nouveaux profils produisent des signaux réalistes qui résistent à ce biais.
+
+#### Architecture `_Perlin1D` (pure numpy)
+
+```python
+class _Perlin1D:
+    """Bruit de Perlin 1D — pas de dépendance externe, seed isolée."""
+    def __init__(self, seed: int = 42, table_size: int = 256) -> None:
+        rng = np.random.default_rng(seed)
+        perm = rng.permutation(table_size).astype(np.int32)
+        self._perm = np.concatenate([perm, perm])   # table étendue (évite modulo)
+        self._grad = (rng.integers(0, 2, table_size) * 2 - 1).astype(np.float64)
+
+    def noise(self, x: float) -> float:
+        """Bruit de Perlin 1D dans [-1, 1]. noise(int) = 0 (nœuds de grille)."""
+        ...
+
+    def octaves(self, x: float, n_octaves: int = 4, persistence: float = 0.5) -> float:
+        """Bruit fractal multifréquence (somme de n_octaves harmoniques)."""
+        ...
+```
+
+#### Sémantique du profil `composite_stress`
+
+```
+charge(t) = clamp(
+    base_load
+    + daily_amplitude × sin(2π t / daily_period_s + daily_phase_s)
+    + weekly_amplitude × sin(2π t / weekly_period_s)
+    + drift_rate × min(t, drift_max / drift_rate)           # dérive bornée
+    + spike_t × spike_magnitude                             # spikes Poisson
+    + perlin_amplitude × perlin.octaves(t × perlin_scale)  # texture fine
+    , 0.0, 1.0
+)
+```
+
+La dérive représente une montée en charge progressive (vieillissement, accumulation de chaleur) bornée à `drift_max` pour éviter une saturation irréversible.
+
+#### Compatibilité descendante
+
+Les profils `sine_wave`, `ramp_with_spikes`, `constant` et `step` sont inchangés. Les scénarios existants qui les utilisent continuent de fonctionner sans modification.
 
 ---
 

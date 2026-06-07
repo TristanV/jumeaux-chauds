@@ -12,7 +12,7 @@ Un projet de Master 2 conçu pour enseigner l'IoT, les modèles thermiques, MQTT
 
 - 🌡️ **Modèle thermique réaliste** — Équations différentielles 1er ordre avec charge CPU, refroidissement par fans, bruit gaussien
 - 📡 **Télémétrie MQTT multi-canaux** — 5 routes de données distinctes (direct MQTT, API REST, TimescaleDB, Grafana, Streamlit)
-- ⚙️ **Scénarios de charge avancés** — nominal, stress, heatwave (vague de chaleur 24h), busy_weeks (cycles réalistes 7 jours)
+- ⚙️ **Scénarios de charge avancés** — basic (baseline), nominal, stress, heatwave, busy_weeks — avec 5 profils de charge (sine_wave, multi_scale_sine, perlin_noise, markov_chain, composite_stress)
 - 🎮 **Contrôle et observation** — FastAPI REST + WebSocket, MQTT observer en temps réel, injection de pannes
 - 📊 **Dashboards interactifs** — Streamlit pour monitoring temps réel, Grafana pour analytics historiques
 - 🧪 **Suite de tests complète** — 330+ tests (couverture ≥ 85%), tests par couche d'architecture
@@ -130,18 +130,32 @@ pytest tests/ -v --cov=simulation --cov=config          # 5 min
 
 ## 🔌 Scénarios Disponibles
 
-| Scénario | Durée | Cas d'usage |
-|----------|-------|-----------|
-| **nominal** | 1-60m | Charge stable, baseline |
-| **stress** | 2-60m | Tests de limite thermique |
-| **heatwave** | 24h | Vague de chaleur + rush hours |
-| **busy_weeks** | 7d | Cycles réalistes (weekday/weekend) |
+| Scénario | Profil de charge | Cas d'usage |
+|----------|-----------------|-----------|
+| **basic** | `sine_wave` | Baseline pédagogique — motif périodique simple, aucune panne |
+| **nominal** | `multi_scale_sine` | Charge réaliste datacenter (3 sinusoïdes incommensurables : horaire, journalière, hebdomadaire) |
+| **heatwave** | `multi_scale_sine` | Vague de chaleur — charge de fond élevée + pics journaliers marqués |
+| **busy_weeks** | `perlin_noise` | Semaines chargées — charge organique continue, aucun motif répétitif détectable |
+| **stress** | `composite_stress` | Stress haute fidélité — cycles + dérive thermique progressive + spikes incidents + texture Perlin |
+
+**Profils de charge disponibles :**
+
+| Profil | Description |
+|--------|-------------|
+| `sine_wave` | Sinusoïde pure — référence pédagogique |
+| `ramp_with_spikes` | Montée progressive + spikes aléatoires |
+| `multi_scale_sine` | Superposition de 3 sinusoïdes (horaire, journalière, hebdomadaire) |
+| `perlin_noise` | Bruit Perlin multifractal — organique et non répétitif |
+| `markov_chain` | Chaîne de Markov 4 états (idle/moderate/heavy/burst) |
+| `composite_stress` | Combinaison : cycles + dérive + spikes + texture Perlin |
 
 ```bash
 # Exemples
+python scripts/run_simulator.py --scenario basic --duration 5m
 python scripts/run_simulator.py --scenario nominal --duration 10m
 python scripts/run_simulator.py --scenario heatwave --duration 24h
 python scripts/run_simulator.py --scenario busy_weeks --duration 7d
+python scripts/run_simulator.py --scenario stress --duration 1h
 ```
 
 ---
@@ -183,6 +197,11 @@ Extensions pédagogiques prioritaires
   - Simulation **OFF par défaut** au lancement Docker (variable `SIMULATION_AUTOSTART=0`)
   - Bandeau de contrôle rapide Streamlit : ▶ Démarrer / ⏸ Pause / ▶ Reprendre / ⏹ Arrêter / 🗑 Reset
   - API : `GET /simulation/status`, `POST /simulation/start|pause|resume|stop`
+- 8.14 Bibliothèque de profils de charge réalistes ✅ (Phase A)
+  - 4 nouveaux profils : `multi_scale_sine`, `perlin_noise`, `markov_chain`, `composite_stress`
+  - Implémentation pure numpy — aucune dépendance externe (`_Perlin1D` intégré)
+  - 5 scénarios mis à jour : `basic` (nouveau), `nominal`, `heatwave`, `busy_weeks`, `stress`
+  - 37 nouveaux tests de profils (`tests/test_load_profiles.py`)
 - 8.2 Régulateur PID configurable ⏳ (planifié)
 - 8.3 Projection coût électrique mensuel ⏳ (planifié)
 

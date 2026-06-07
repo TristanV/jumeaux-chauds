@@ -274,6 +274,8 @@ class ClusterSimulator:
         while self._running:
             await asyncio.sleep(dt_real_loop)
             if self._paused:
+                # Ticks suspendus — pas de publication MQTT ni WebSocket
+                # (le snapshot reste stable puisque aucune machine ne tourne)
                 continue
 
             # ── Batch de ticks simulés ──────────────────────────────────
