@@ -113,6 +113,26 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
         type=lp["type"],
         params={k: v for k, v in lp.items() if k != "type"},
     )
+
+    # Validation anticipée pour trace_replay : vérifier que le fichier CSV existe
+    # avant de remplacer le scenario_engine (évite un crash silencieux dans run())
+    if lp["type"] == "trace_replay":
+        from pathlib import Path
+        trace_file = lp.get("trace_file", "data/traces/bitbrains_week_vm00.csv")
+        trace_path = Path(trace_file)
+        if not trace_path.is_absolute():
+            project_root = Path(__file__).parent.parent.parent
+            trace_path = project_root / trace_file
+        if not trace_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Fichier de trace introuvable : {trace_path}\n"
+                    f"Lancez scripts/download_traces.py pour télécharger les traces Bitbrains, "
+                    f"ou vérifiez le chemin 'trace_file' dans le YAML du scénario."
+                ),
+            )
+
     simulator._scenario_engine = ScenarioEngine(profile_cfg=lp_cfg)
 
     # Mettre à jour le scénario actif dans deps

@@ -288,7 +288,16 @@ class ClusterSimulator:
                 self._t_elapsed_s += dt_sim
                 tick_counter += 1
 
-                load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
+                try:
+                    load_factor = self._scenario_engine.get_load_factor(self._t_elapsed_s)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "Erreur get_load_factor (scénario '%s') : %s — "
+                        "charge forcée à 0.5, vérifiez la config du scénario.",
+                        getattr(self._scenario_engine, "profile_cfg", "?"),
+                        exc,
+                    )
+                    load_factor = 0.5  # fallback neutre, la boucle continue
 
                 # Capturer statuts avant ce tick individuel
                 pre_tick_statuses = {mid: m.status for mid, m in self.machines.items()}

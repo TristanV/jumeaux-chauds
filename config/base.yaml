@@ -7,8 +7,8 @@ physics:
 # ─── Configuration de simulation (globale, non-surchargeable par scénarios) ───
 simulation:
   start_time: "2005-01-01T00:00:00Z" # Date absolue de départ — editable via dashboard
-                                     # Valeur par défaut de référence
-                                     # Utilisée comme point zéro pour timestamp simulés
+                                     # Valeur de référence reproductible pour tous les scénarios
+                                     # Utilisée comme point zéro pour les timestamps simulés
   speed_multiplier: 1.0               # Vitesse de simulation — editable via dashboard
                                      # 1.0 = real-time, 60.0 = 1 min/sec, 3600.0 = 1 hour/sec
                                      # 86400.0 = 1 day/sec
