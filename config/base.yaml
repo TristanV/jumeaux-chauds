@@ -66,7 +66,7 @@ cluster:
         control_mode: "auto"         # "auto" | "manual"
         auto_policy:
           type: "proportional"
-          gain_rpm_per_c: 50.0
+          gain_rpm_per_c: 30.0       # Phase 8.15 : réduit 50→30 (fans montent moins vite en auto)
       noise:
         temperature_std_c: 0.3
         power_std_w: 2.0
@@ -99,7 +99,7 @@ cluster:
         control_mode: "auto"
         auto_policy:
           type: "proportional"
-          gain_rpm_per_c: 45.0
+          gain_rpm_per_c: 28.0       # Phase 8.15 : réduit 45→28 (workers : fans moins réactifs)
       noise:
         temperature_std_c: 0.3
         power_std_w: 1.5

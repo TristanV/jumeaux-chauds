@@ -1,3 +1,9 @@
+# Phase 8.15 : température ambiante élevée pour simuler une vague de chaleur réaliste
+# IMPORTANT : ambient_temp_c n'est PAS surchargeable via cluster.role_profiles ici —
+# OmegaConf corrompt la liste cluster.machines lors du merge de section cluster:.
+# L'override ambient_temp_c=32°C est appliqué programmatiquement dans analyze_thermal_risk.py
+# et via un paramètre simulation.heatwave_ambient_temp_c dans le simulateur.
+
 simulation:
   mode: "heatwave"
   tick_rate_hz: 10.0
@@ -5,39 +11,47 @@ simulation:
   duration: "0"
 
   # Phase 8.14 : multi_scale_sine avec charge de base élevée
-  # Simule un datacenter en période de chaleur :
-  # - charge de fond plus élevée (refroidissement sollicité en permanence)
+  # Phase 8.15 : ambient_temp_c rehaussée à 32°C (vague de chaleur réaliste)
+  #              + fault_injection activée (fan_failure + power_surge)
+  #
+  # Simule un datacenter en période de canicule :
+  # - température ambiante de base à 32°C (au lieu de 22°C) — marge thermique réduite
+  # - charge de fond élevée (refroidissement sollicité en permanence)
   # - cycles réalistes journaliers/hebdomadaires
-  # - bruit plus élevé (comportement instable sous stress thermique)
+  # - pannes fan_failure qui surviennent plus souvent sous chaleur extrême
   load_profile:
     type: "multi_scale_sine"
     base_load: 0.58
     fast_amplitude: 0.10
     fast_period_s: 3600.0
     fast_phase_s: -1800.0
-    daily_amplitude: 0.22            # pics de charge journaliers plus marqués
+    daily_amplitude: 0.22
     daily_period_s: 86400.0
-    daily_phase_s: -25200.0          # pic en milieu d'après-midi (14h)
+    daily_phase_s: -25200.0
     weekly_amplitude: 0.06
     weekly_period_s: 604800.0
     weekly_phase_s: 0.0
-    noise_std: 0.04                  # plus de variabilité sous chaleur
+    noise_std: 0.04
 
   noise:
     enabled: true
-    temperature_std_c: 0.5
-    spike_probability: 0.005
-    spike_magnitude_c: 3.0
+    temperature_std_c: 0.6
+    spike_probability: 0.006
+    spike_magnitude_c: 4.0
     drift:
       enabled: true
-      rate_c_per_s: 0.0001           # dérive thermique ambiante progressive
+      rate_c_per_s: 0.0002
 
   fault_injection:
     enabled: true
     faults:
-      - type: "thermal_runaway"
-        distribution: "exponential"
-        scale_s: 3600.0
-        probability_per_tick: 0.0002
-        magnitude: 1.5
-    recovery_delay_s: 60.0
+      - type: "fan_failure"
+        distribution: "weibull"
+        shape: 1.2
+        scale_s: 10800
+        magnitude: 1.0
+      - type: "power_surge"
+        distribution: "uniform"
+        probability_per_tick: 0.00008
+        magnitude: 1.15
+    recovery_delay_s: 90.0

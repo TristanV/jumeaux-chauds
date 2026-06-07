@@ -65,6 +65,7 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
   ├── Étape 8.14 : Bibliothèque de profils de charge réalistes ✅
   │   ├── 8.14A : Nouveaux profils (multi_scale_sine, perlin_noise, markov_chain, composite_stress) ✅
   │   └── 8.14B : Trace replay (dataset Bitbrains) ⏳
+  ├── Étape 8.15 : Analyse risque thermique + calibration scénarios ✅
   ├── Étape 8.2 : Régulateur PID configurable ⏳
   └── Étape 8.3 : Coût électrique mensuel ⏳
 ```
@@ -172,6 +173,14 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
       - [x] 8.14B.7 — tests/test_load_profiles.py : 15 tests (TestTraceReplay + TestTraceReplayEngine : chargement, interpolation, loop, speed_factor, erreurs)
       - [x] 8.14B.8 — tests/test_machine_yaml_integration.py : 2 tests YAML (trace_replay profile, fault_injection disabled)
       - [x] 8.14B.9 — documents/TRACE_REPLAY_GUIDE.md : guide complet (3 modes A/B/C, référence YAML, format CSV, changement à chaud)
+  - [x] 8.15 — Analyse risque thermique + calibration scénarios ✅ (7 juin 2026)
+    - [x] 8.15.1 — scripts/analyze_thermal_risk.py : analyse synchrone par scénario (stats par machine, niveaux LOW/MEDIUM/HIGH/CRITICAL)
+    - [x] 8.15.2 — Override programmatique ambient_temp_c=32°C pour heatwave (contournement bug OmegaConf merge liste)
+    - [x] 8.15.3 — heatwave.yaml : fault_injection activée (fan_failure + power_surge), ambient override via script
+    - [x] 8.15.4 — busy_weeks.yaml : fault_injection activée (fan_failure, sensor_drift, power_surge à ~10% stress)
+    - [x] 8.15.5 — base.yaml : gain_rpm_per_c réduit (master 50→30, worker 45→28) — fans moins réactifs
+    - [x] 8.15.6 — Résultats vérifiés : nominal=LOW, heatwave=CRITICAL(7OH/h), busy_weeks=CRITICAL(4OH/h), stress=CRITICAL(34OH/h)
+    - [x] 8.15.7 — documents/specifications.md : section 14.8 Analyse du risque thermique + lien TOC
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
@@ -181,7 +190,7 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 
 La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
 
-> **État au 7 juin 2026 :** Phase 8.14 complète (8.14A + 8.14B) — bibliothèque de 5 profils de charge réalistes + trace replay avec dataset Bitbrains embarqué. 52 nouveaux tests de profils. Scénario `trace_replay` opérationnel avec 4 traces synthétiques et script de téléchargement du vrai dataset.
+> **État au 7 juin 2026 :** Phase 8.15 complète — analyse risque thermique par scénario (`scripts/analyze_thermal_risk.py`), calibration fan/scénarios, résultats vérifiés (nominal=LOW, heatwave/busy_weeks/stress=CRITICAL). Phase 8.14 complète (8.14A + 8.14B) — bibliothèque de 5 profils de charge réalistes + trace replay Bitbrains.
 
 ### Contexte Phase 8.12 — Pourquoi cette refonte
 

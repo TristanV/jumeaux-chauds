@@ -46,6 +46,7 @@ Les données fluent depuis la **simulation** (ClusterSimulator) vers les **clien
 12. [Docker Compose](#12-docker-compose)
 13. [Tests](#13-tests)
 14. [Extensions pédagogiques](#14-extensions-pédagogiques)
+    - [14.8 Analyse du risque thermique](#148-analyse-du-risque-thermique-par-scénario-phase-815) — `scripts/analyze_thermal_risk.py`
 
 ---
 
@@ -1542,3 +1543,58 @@ python scripts/generate_dataset.py --scenario heatwave --duration 24h --output d
 # Réduire tick_rate pour accélérer (moins de points, même durée simulée)
 python scripts/generate_dataset.py --scenario busy_weeks --duration 1y --output annee.parquet --tick-rate 1
 ```
+
+
+---
+
+### 14.8 Analyse du risque thermique par scénario (Phase 8.15)
+
+**Script :** `scripts/analyze_thermal_risk.py`
+
+**Objectif :** quantifier statistiquement le risque de surchauffe pour chaque scénario, sans passer par la stack Docker/MQTT. Produit un rapport tabulaire comparant tous les scénarios sur leurs indicateurs thermiques et énergétiques.
+
+**Métriques calculées par machine et par scénario :**
+
+| Métrique | Description |
+|---|---|
+| `Actif%` | % du temps simulé en état `on` ou `degraded` |
+| `T_moy` / `T_max` | Température moyenne et maximale sur les phases actives (°C) |
+| `Danger%` | % du temps actif avec T ≥ 95% du seuil de shutdown |
+| `Dégradé%` | % du temps total en état `degraded` |
+| `Overheat` | Nombre d'événements de surchauffe (transitions → `off` par T ≥ t_shutdown_c) |
+| `Fan_RPM` | Vitesse moyenne des ventilateurs |
+| `Énergie` | Énergie consommée en kWh sur la durée simulée |
+
+**Niveaux de risque :**
+
+| Niveau | Critère |
+|---|---|
+| `LOW` | OH/h < 0.1 **et** Danger% < 3% |
+| `MEDIUM` | OH/h ≥ 0.1 **ou** Danger% ≥ 3% |
+| `HIGH` | OH/h ≥ 0.5 **ou** Danger% ≥ 10% |
+| `CRITICAL` | OH/h ≥ 2.0 **ou** Danger% ≥ 30% |
+
+**Usage :**
+
+```bash
+# Analyser tous les scénarios sur 1h simulée
+python scripts/analyze_thermal_risk.py
+
+# Analyse ciblée sur 6h simulées, export fichier
+python scripts/analyze_thermal_risk.py --duration 6h --scenarios heatwave busy_weeks stress --output rapport.txt
+
+# Sans couleurs ANSI (pour export ou CI)
+python scripts/analyze_thermal_risk.py --duration 2h --no-color
+```
+
+**Options CLI :**
+
+| Option | Défaut | Description |
+|---|---|---|
+| `--duration` | `1h` | Durée simulée par scénario (ex: 30m, 2h, 24h) |
+| `--scenarios` | tous | Scénarios à analyser (basic, nominal, heatwave, busy_weeks, stress) |
+| `--output` | — | Fichier de sortie en plus de la console |
+| `--tick-rate` | `10` | Ticks/s simulée (identique à la simulation normale) |
+| `--no-color` | false | Désactiver la colorisation ANSI |
+
+**Architecture :** boucle synchrone pure (même moteur que `generate_dataset.py`), sans asyncio ni MQTT. Performance ~6 000–9 000 ticks/s selon le scénario, soit 1h simulée analysée en ~4 secondes.

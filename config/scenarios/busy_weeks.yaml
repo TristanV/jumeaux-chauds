@@ -4,22 +4,14 @@ simulation:
   events_per_sec: 1.0
   duration: "0"
 
-  # Phase 8.14 : perlin_noise remplace sine_wave
-  # Charge organique, lisse et non-répétitive — aucun pattern évident
-  # Idéal pour tester des algorithmes de maintenance prédictive qui
-  # ne doivent pas sur-fitter un cycle périodique.
-  #
-  # scale=0.00005 → variation visible sur ~20 000 s (5-6h simulées)
-  # n_octaves=5   → texture multi-échelle (variations rapides + lentes)
-  # drift_rate    → montée progressive de la charge sur plusieurs jours
   load_profile:
     type: "perlin_noise"
-    base_load: 0.48
-    amplitude: 0.32
-    scale: 0.00005               # fréquence principale : ~20 000 s
-    n_octaves: 5                 # richesse harmonique
-    persistence: 0.55            # poids des harmoniques hautes fréquences
-    drift_rate: 0.0              # pas de dérive (charge stable sur plusieurs semaines)
+    base_load: 0.52
+    amplitude: 0.35
+    scale: 0.00005
+    n_octaves: 5
+    persistence: 0.55
+    drift_rate: 0.0
     drift_max: 0.0
 
   noise:
@@ -34,9 +26,17 @@ simulation:
   fault_injection:
     enabled: true
     faults:
-      - type: "power_surge"
+      - type: "fan_failure"
+        distribution: "weibull"
+        shape: 1.5
+        scale_s: 72000
+        magnitude: 1.0
+      - type: "sensor_drift"
         distribution: "exponential"
-        scale_s: 7200.0
-        probability_per_tick: 0.0001
-        magnitude: 1.2
-    recovery_delay_s: 90.0
+        scale_s: 36000
+        magnitude: 0.3
+      - type: "power_surge"
+        distribution: "uniform"
+        probability_per_tick: 0.00002
+        magnitude: 1.20
+    recovery_delay_s: 120.0
