@@ -201,15 +201,9 @@ class _TraceReplay:
         t_origin = self._timestamps[0]
 
         if self._loop and self._duration > 0:
-            # Modulo sur le temps relatif à l'origine
+            # Modulo sur le temps relatif à l'origine — après duration, retour au début
             t_rel = t_trace - t_origin
-            t_mod = t_rel % self._duration
-            # Si t_mod == 0 et on n'est pas au tout début, on est exactement
-            # à la fin d'un cycle → pointer sur le dernier point de la trace
-            if t_mod == 0.0 and t_rel > 0.0:
-                t = self._timestamps[-1]
-            else:
-                t = t_origin + t_mod
+            t = t_origin + (t_rel % self._duration)
         else:
             t = min(t_trace, self._timestamps[-1])
 

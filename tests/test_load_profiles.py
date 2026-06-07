@@ -426,8 +426,10 @@ class TestTraceReplay:
         assert tr.n_points == 20
         # Au début : cpu=20% → load=0.20
         assert tr.get(0.0) == pytest.approx(0.20, abs=0.01)
-        # À la fin (5700s) : cpu≈80% → load≈0.80
-        assert tr.get(5700.0) == pytest.approx(0.80, abs=0.02)
+        # À la fin (loop=False) : cpu≈80% → load≈0.80
+        # Note : avec loop=True, t=duration revient au début (sémantique correcte du loop)
+        tr_no_loop = _TraceReplay(str(cpu_trace_csv), loop=False)
+        assert tr_no_loop.get(5700.0) == pytest.approx(0.80, abs=0.02)
 
     def test_load_factor_direct(self, load_factor_csv: Path) -> None:
         """Charge un CSV load_factor (utilisé directement sans normalisation)."""
