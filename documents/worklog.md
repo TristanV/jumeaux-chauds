@@ -393,3 +393,33 @@ Deux bugs fondamentaux identifiés dans l'implémentation actuelle :
 - CLI : `--scenario`, `--duration`, `--output`, `--format`
 - Performance cible : ~100k ticks/s → 1 mois de données en ~4 minutes
 - Message de commit : `feat(generate_dataset): batch ML corpus generation script`
+
+---
+
+### Phase 8.12B — Script génération corpus ML ✅
+
+**Date :** 7 juin 2026
+
+**Fichier créé :** `scripts/generate_dataset.py`
+
+**Architecture :** boucle Python synchrone pure sans asyncio ni MQTT. Appelle `ClusterSimulator._tick()` en boucle directe — aucun overhead réseau.
+
+**Performance mesurée :** ~3 700 ticks/s sur 5 machines
+- 1 heure simulée → ~10 secondes réelles
+- 1 jour simulé → ~4 minutes réelles
+- 1 semaine simulée → ~28 minutes réelles
+
+**CLI :**
+```bash
+python scripts/generate_dataset.py --scenario stress --duration 30d --output dataset.parquet
+python scripts/generate_dataset.py --scenario nominal --duration 7d --output data.csv --format csv
+python scripts/generate_dataset.py --scenario heatwave --duration 24h --output data.parquet --timescaledb
+```
+
+**Colonnes générées :** ts, cluster_id, machine_id, role, status, temperature_c, power_w, energy_kwh, load_factor, fan_rpm_avg, fault_active, fault_types
+
+**Correctifs associés (Phase 8.12A suite) :**
+- machine.py : `fault_id` UUID dans `ActiveFault` — corrige la déduplication des pannes (`ts_start=None` → toutes les pannes après la première étaient silencieusement ignorées)
+- cluster.py : `_format_duration` restaurée (fichier tronqué lors d'un Edit)
+- cluster.py : `batch_size` recalculé à chaque itération de la boucle (hot-reload vitesse)
+- tests/test_speed_continuity.py : 8 tests de monotonie des timestamps

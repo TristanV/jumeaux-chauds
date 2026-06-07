@@ -176,9 +176,9 @@ Extensions pédagogiques prioritaires
 - 8.6 Bug fixes tests + config ✅ — **317/317 tests, 0 warnings**
 - 8.7 Affinage thermique ✅ — modèle physique réaliste (RPM^1.5, clamp T, sous-pas)
 - 8.8/8.9/8.10/8.11 — Corrections bugs comportementaux, traçabilité, Grafana ✅
-- 8.12 Refonte architecture speed_multiplier ⏳ (en cours)
-  - 8.12A : correction boucle temps réel (dt_sim fixe, CPU throttle branché, batch ticks)
-  - 8.12B : script génération corpus ML (boucle synchrone, CSV/Parquet, bulk TimescaleDB)
+- 8.12 Refonte architecture speed_multiplier ✅
+  - 8.12A : correction boucle temps réel (dt_sim fixe, CPU throttle, batch, fault_id)
+  - 8.12B : script génération corpus ML (~3 700 ticks/s, CSV/Parquet, bulk TimescaleDB)
 - 8.2 Régulateur PID configurable ⏳ (planifié)
 - 8.3 Projection coût électrique mensuel ⏳ (planifié)
 

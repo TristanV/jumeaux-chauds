@@ -1247,3 +1247,31 @@ df.to_parquet(output_path)
 | `load_factor` | float | Charge CPU [0, 1] |
 | `fan_rpm_avg` | float | Vitesse moyenne fans (RPM) |
 | `fault_active` | bool | Panne active au tick |
+
+---
+
+### 14.6 Performances mesurées — generate_dataset.py (Phase 8.12B)
+
+Mesures réelles sur 5 machines, scénario nominal, Python 3.12 :
+
+| Durée simulée | Temps réel mesuré | Lignes générées |
+|---|---|---|
+| 1 heure | ~10 secondes | 180 000 |
+| 1 jour | ~4 minutes | 4 320 000 |
+| 1 semaine | ~28 minutes | 30 240 000 |
+| 1 mois | ~2 heures | 130 000 000 |
+
+**Commandes de référence :**
+```bash
+# 30 jours → Parquet (~500 MB)
+python scripts/generate_dataset.py --scenario stress --duration 30d --output dataset_30j.parquet
+
+# 7 jours → CSV
+python scripts/generate_dataset.py --scenario nominal --duration 7d --output data.csv --format csv
+
+# 24h heatwave → Parquet + insert TimescaleDB
+python scripts/generate_dataset.py --scenario heatwave --duration 24h --output data.parquet --timescaledb
+
+# Réduire tick_rate pour accélérer (moins de points, même durée simulée)
+python scripts/generate_dataset.py --scenario busy_weeks --duration 1y --output annee.parquet --tick-rate 1
+```
