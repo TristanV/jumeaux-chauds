@@ -61,6 +61,7 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
   ├── Étape 8.12 : Refonte architecture speed_multiplier ✅
   │   ├── 8.12A : Correction boucle temps réel (dt_sim fixe, CPU throttle, batch) ✅
   │   └── 8.12B : Script génération corpus ML (batch synchrone, CSV/Parquet) ✅
+  ├── Étape 8.13 : Contrôle démarrage/pause/arrêt de simulation ✅
   ├── Étape 8.2 : Régulateur PID configurable ⏳
   └── Étape 8.3 : Coût électrique mensuel ⏳
 ```
@@ -139,6 +140,12 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
       - [x] 8.12B.4 — CLI complet : --scenario, --duration, --output, --format, --timescaledb, --no-faults
       - [x] 8.12B.5 — Performance mesurée : ~3 700 ticks/s (1h simulée en 10s, 1j en ~4min)
       - [x] 8.12B.6 — requirements.txt : ajout pandas>=2.0, pyarrow>=14.0
+  - [x] 8.13 — Contrôle démarrage/pause/arrêt simulation ✅ (7 juin 2026)
+    - [x] 8.13.1 — cluster.py : attributs _paused, méthodes pause()/resume()/stop()/get_status()
+    - [x] 8.13.2 — api/main.py : variable SIMULATION_AUTOSTART (défaut 0 = éteint)
+    - [x] 8.13.3 — api/routes/simulation.py : endpoints GET /status, POST /start, /pause, /resume, /stop
+    - [x] 8.13.4 — docker-compose.yml : variable SIMULATION_AUTOSTART (défaut 0)
+    - [x] 8.13.5 — dashboard/app.py : bandeau de contrôle rapide (▶ Démarrer / ⏸ Pause / ▶ Reprendre / ⏹ Arrêter / 🗑 Reset)
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
@@ -148,7 +155,7 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 
 La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
 
-> **État au 7 juin 2026 :** Phase 8.12 complète — architecture speed_multiplier corrigée, script génération corpus ML opérationnel (~3 700 ticks/s).
+> **État au 7 juin 2026 :** Phase 8.13 complète — contrôle start/pause/stop de simulation depuis l'API et le dashboard Streamlit. Simulation désactivée par défaut au lancement Docker (SIMULATION_AUTOSTART=0).
 
 ### Contexte Phase 8.12 — Pourquoi cette refonte
 

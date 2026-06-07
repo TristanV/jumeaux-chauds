@@ -9,9 +9,17 @@ Endpoints (Phase 8.4) :
   GET    /simulation/speed                → infos vitesse de simulation
   PUT    /simulation/speed                → change la vitesse
   POST   /simulation/speed/reset          → réinitialise temps + énergie
+
+Endpoints (Phase 8.13) :
+  GET    /simulation/status               → état de la simulation (running/paused/stopped)
+  POST   /simulation/start                → démarre ou reprend la simulation
+  POST   /simulation/pause                → met en pause (conserve l'état)
+  POST   /simulation/resume               → reprend depuis la pause
+  POST   /simulation/stop                 → arrête la simulation (détruit la boucle)
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Body, HTTPException
@@ -116,6 +124,98 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
         ok=True,
         message=f"Scénario changé vers '{cmd.scenario}' (profil: {lp['type']}).",
     )
+
+
+# ------------------------------------------------------------------
+# Phase 8.13 — Contrôle démarrage / pause / arrêt de la simulation
+# ------------------------------------------------------------------
+
+
+@router.get("/status")
+async def get_simulation_status() -> dict:
+    """Retourne l'état de la simulation : running, paused ou stopped."""
+    simulator = deps.get_cluster()
+    return {
+        "simulation_status": simulator.get_status(),
+        "running": simulator.is_running(),
+        "paused": simulator.is_paused(),
+        "elapsed_time_s": simulator._t_elapsed_s,
+        "elapsed_time_formatted": simulator._format_duration(simulator._t_elapsed_s),
+    }
+
+
+@router.post("/start", response_model=CommandResponse)
+async def start_simulation() -> CommandResponse:
+    """Démarre la simulation si elle est arrêtée, ou reprend si elle est en pause.
+
+    - Si arrêtée (stopped) → crée une nouvelle boucle asyncio
+    - Si en pause (paused)  → reprend la boucle existante (équivalent à /resume)
+    - Si déjà en cours     → no-op, retourne l'état actuel
+    """
+    simulator = deps.get_cluster()
+
+    if simulator.is_running() and not simulator.is_paused():
+        return CommandResponse(ok=True, message="Simulation déjà en cours.")
+
+    if simulator.is_paused():
+        # Juste lever la pause
+        simulator.resume()
+        return CommandResponse(ok=True, message="Simulation reprise depuis la pause.")
+
+    # Stopped → lancer une nouvelle boucle
+    ws_manager = deps._ws_manager
+    publisher = deps._publisher
+
+    sim_task = asyncio.create_task(
+        simulator.run(publisher=publisher, ws_manager=ws_manager)
+    )
+    deps._sim_task = sim_task
+    logger.info("Simulation démarrée manuellement via POST /simulation/start")
+    return CommandResponse(ok=True, message="Simulation démarrée.")
+
+
+@router.post("/pause", response_model=CommandResponse)
+async def pause_simulation() -> CommandResponse:
+    """Met la simulation en pause. L'état thermique et le temps simulé sont conservés."""
+    simulator = deps.get_cluster()
+
+    if not simulator.is_running():
+        raise HTTPException(status_code=409, detail="La simulation n'est pas en cours.")
+    if simulator.is_paused():
+        return CommandResponse(ok=True, message="Simulation déjà en pause.")
+
+    simulator.pause()
+    return CommandResponse(ok=True, message="Simulation mise en pause.")
+
+
+@router.post("/resume", response_model=CommandResponse)
+async def resume_simulation() -> CommandResponse:
+    """Reprend la simulation après une pause."""
+    simulator = deps.get_cluster()
+
+    if not simulator.is_running():
+        raise HTTPException(status_code=409, detail="La simulation n'est pas en cours.")
+    if not simulator.is_paused():
+        return CommandResponse(ok=True, message="Simulation déjà en cours (non pausée).")
+
+    simulator.resume()
+    return CommandResponse(ok=True, message="Simulation reprise.")
+
+
+@router.post("/stop", response_model=CommandResponse)
+async def stop_simulation() -> CommandResponse:
+    """Arrête la simulation. Utilisez /start pour redémarrer."""
+    simulator = deps.get_cluster()
+
+    if not simulator.is_running():
+        return CommandResponse(ok=True, message="Simulation déjà arrêtée.")
+
+    simulator.stop()
+    if deps._sim_task is not None:
+        deps._sim_task.cancel()
+        deps._sim_task = None
+    logger.info("Simulation arrêtée manuellement via POST /simulation/stop")
+    return CommandResponse(ok=True, message="Simulation arrêtée.")
 
 
 # ------------------------------------------------------------------

@@ -64,22 +64,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     simulator = ClusterSimulator(config=cfg)
     deps._simulator = simulator
     deps._config = cfg
+    deps._publisher = publisher
 
-    # --- Lancement de la boucle en background ----------------------------
-    sim_task = asyncio.create_task(
-        simulator.run(publisher=publisher, ws_manager=ws_manager)
-    )
-    logger.info("ClusterSimulator démarré (cluster_id=%s)", simulator.cluster_id)
+    # --- Lancement conditionnel de la boucle ----------------------------
+    # SIMULATION_AUTOSTART=1 (ou "true") → démarrage immédiat
+    # SIMULATION_AUTOSTART=0 (défaut)    → l'utilisateur démarre manuellement
+    autostart_env = os.environ.get("SIMULATION_AUTOSTART", "0").strip().lower()
+    autostart = autostart_env in ("1", "true", "yes")
+
+    if autostart:
+        sim_task = asyncio.create_task(
+            simulator.run(publisher=publisher, ws_manager=ws_manager)
+        )
+        deps._sim_task = sim_task
+        logger.info(
+            "ClusterSimulator démarré automatiquement (SIMULATION_AUTOSTART=1, cluster_id=%s)",
+            simulator.cluster_id,
+        )
+    else:
+        deps._sim_task = None
+        logger.info(
+            "ClusterSimulator prêt — en attente de démarrage manuel "
+            "(SIMULATION_AUTOSTART=0, cluster_id=%s)",
+            simulator.cluster_id,
+        )
 
     yield  # L'API est opérationnelle
 
     # --- Arrêt propre ----------------------------------------------------
     simulator.stop()
-    sim_task.cancel()
-    try:
-        await asyncio.wait_for(sim_task, timeout=3.0)
-    except (asyncio.CancelledError, asyncio.TimeoutError):
-        pass
+    if deps._sim_task is not None:
+        deps._sim_task.cancel()
+        try:
+            await asyncio.wait_for(deps._sim_task, timeout=3.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
 
     if publisher is not None:
         try:
@@ -135,5 +154,7 @@ async def root() -> dict:
         "cluster_id": simulator.cluster_id,
         "scenario_active": scenario,
         "machines_count": len(simulator.machines),
+        "simulation_status": simulator.get_status(),
         "running": simulator._running,
+        "paused": simulator._paused,
     }

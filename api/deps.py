@@ -16,6 +16,8 @@ _simulator: "ClusterSimulator | None" = None
 _ws_manager: "ConnectionManager | None" = None
 _config: dict | None = None
 _scenario_active: str = "nominal"  # Scénario chargé au démarrage
+_sim_task: Any = None  # asyncio.Task de la boucle de simulation
+_publisher: Any = None  # MqttPublisher optionnel
 
 
 def get_cluster() -> "ClusterSimulator":

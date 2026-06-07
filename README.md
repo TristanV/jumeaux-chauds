@@ -179,6 +179,10 @@ Extensions pédagogiques prioritaires
 - 8.12 Refonte architecture speed_multiplier ✅
   - 8.12A : correction boucle temps réel (dt_sim fixe, CPU throttle, batch, fault_id)
   - 8.12B : script génération corpus ML (~3 700 ticks/s, CSV/Parquet, bulk TimescaleDB)
+- 8.13 Contrôle start/pause/stop simulation ✅
+  - Simulation **OFF par défaut** au lancement Docker (variable `SIMULATION_AUTOSTART=0`)
+  - Bandeau de contrôle rapide Streamlit : ▶ Démarrer / ⏸ Pause / ▶ Reprendre / ⏹ Arrêter / 🗑 Reset
+  - API : `GET /simulation/status`, `POST /simulation/start|pause|resume|stop`
 - 8.2 Régulateur PID configurable ⏳ (planifié)
 - 8.3 Projection coût électrique mensuel ⏳ (planifié)
 
@@ -216,4 +220,4 @@ Extensions pédagogiques prioritaires
 
 ---
 
-*Dernière mise à jour : 5 juin 2026*
+*Dernière mise à jour : 7 juin 2026*

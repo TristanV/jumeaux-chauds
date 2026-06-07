@@ -129,6 +129,7 @@ class ClusterSimulator:
 
         # Temps et métriques agrégées
         self._running = False
+        self._paused = False
         self._t_elapsed_s: float = 0.0
         self.energy_kwh_total: float = 0.0
         self.cost_eur_total: float = 0.0
@@ -272,6 +273,8 @@ class ClusterSimulator:
 
         while self._running:
             await asyncio.sleep(dt_real_loop)
+            if self._paused:
+                continue
 
             # ── Batch de ticks simulés ──────────────────────────────────
             # batch_size recalculé à chaque itération pour prendre en compte
@@ -406,8 +409,34 @@ class ClusterSimulator:
 
     def stop(self) -> None:
         """Demande l'arrêt de la boucle de simulation."""
-
         self._running = False
+        self._paused = False
+
+    def pause(self) -> None:
+        """Met la simulation en pause (ticks suspendus, état conservé)."""
+        self._paused = True
+        logger.info("Simulation mise en pause")
+
+    def resume(self) -> None:
+        """Reprend la simulation après une pause."""
+        self._paused = False
+        logger.info("Simulation reprise")
+
+    def is_running(self) -> bool:
+        """Retourne True si la boucle est active (même en pause)."""
+        return self._running
+
+    def is_paused(self) -> bool:
+        """Retourne True si la simulation est en pause."""
+        return self._paused
+
+    def get_status(self) -> str:
+        """Retourne 'running', 'paused' ou 'stopped'."""
+        if not self._running:
+            return "stopped"
+        if self._paused:
+            return "paused"
+        return "running"
 
     def _tick(self) -> None:
         """Effectue un seul pas de simulation pour toutes les machines.

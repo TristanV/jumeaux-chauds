@@ -1250,6 +1250,74 @@ df.to_parquet(output_path)
 
 ---
 
+### 14.7 Contrôle démarrage/pause/arrêt de la simulation (Phase 8.13)
+
+#### Objectif
+
+Permettre un contrôle fin du cycle de vie de la boucle de simulation depuis trois points d'entrée : la variable d'environnement Docker, l'API REST, et le dashboard Streamlit.
+
+#### États de la simulation
+
+```
+stopped  ──(start)──▶  running  ──(pause)──▶  paused
+running  ──(stop)───▶  stopped
+paused   ──(resume)─▶  running
+paused   ──(start)──▶  running   (alias resume)
+paused   ──(stop)───▶  stopped
+```
+
+La méthode `get_status()` retourne `"running"`, `"paused"` ou `"stopped"`.
+
+#### Implémentation ClusterSimulator
+
+```python
+# simulation/cluster.py
+
+self._running = False   # True quand la boucle asyncio est active
+self._paused  = False   # True quand les ticks sont suspendus
+
+def pause(self)   → suspend les ticks (boucle asyncio continue de tourner)
+def resume(self)  → reprend les ticks
+def stop(self)    → arrête la boucle asyncio (irrévocable)
+def get_status(self) → "running" | "paused" | "stopped"
+```
+
+La pause est implémentée par un simple `continue` dans la boucle asyncio quand `self._paused == True` : le temps réel s'écoule, mais `_t_elapsed_s` et les ticks thermiques sont figés.
+
+#### API REST (Phase 8.13)
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `GET` | `/simulation/status` | État courant (running/paused/stopped) |
+| `POST` | `/simulation/start` | Démarre (ou reprend si en pause) |
+| `POST` | `/simulation/pause` | Met en pause |
+| `POST` | `/simulation/resume` | Reprend depuis la pause |
+| `POST` | `/simulation/stop` | Arrête la boucle |
+
+Le endpoint `/simulation/start` crée une nouvelle `asyncio.Task` si la simulation est `stopped`, ou appelle `resume()` si elle est `paused`.
+
+#### Variable d'environnement SIMULATION_AUTOSTART
+
+```yaml
+# docker-compose.yml
+environment:
+  SIMULATION_AUTOSTART: ${SIMULATION_AUTOSTART:-0}
+  # 0 = OFF par défaut (lancement manuel)
+  # 1 = démarrage automatique à l'initialisation de l'API
+```
+
+#### Dashboard Streamlit — Bandeau de contrôle rapide
+
+Le bandeau supérieur du dashboard affiche l'état courant et 5 boutons contextuels (désactivés automatiquement selon l'état) :
+
+- **▶ Démarrer** — actif si `stopped` ou `paused`
+- **⏸ Pause** — actif si `running`
+- **▶ Reprendre** — actif si `paused`
+- **⏹ Arrêter** — actif si `running` ou `paused`
+- **🗑 Reset** — toujours disponible (reset complet temps + énergie + TimescaleDB)
+
+---
+
 ### 14.6 Performances mesurées — generate_dataset.py (Phase 8.12B)
 
 Mesures réelles sur 5 machines, scénario nominal, Python 3.12 :

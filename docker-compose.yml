@@ -38,6 +38,7 @@ services:
       SCENARIO: ${SCENARIO:-nominal}
       CLUSTER_ID: ${CLUSTER_ID:-cluster_alpha}
       MQTT_ENABLED: ${MQTT_ENABLED:-1}
+      SIMULATION_AUTOSTART: ${SIMULATION_AUTOSTART:-0}
       MQTT_BROKER_HOST: mosquitto
       MQTT_BROKER_PORT: 1883
       TIMESCALE_HOST: timescaledb

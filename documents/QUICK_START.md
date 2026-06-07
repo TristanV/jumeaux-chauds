@@ -265,6 +265,74 @@ uvicorn api.main:app --port 8000
 
 ---
 
+## ▶ Phase 8.13 : Contrôle démarrage/pause/arrêt de la simulation
+
+### Comportement par défaut (Docker)
+
+**La simulation est OFF au démarrage.** C'est le comportement par défaut (`SIMULATION_AUTOSTART=0`). Le serveur FastAPI démarre, les machines sont initialisées, mais la boucle de simulation n'est pas lancée. Vous devez la démarrer depuis le dashboard ou via l'API.
+
+```bash
+# Démarrage Docker (simulation OFF par défaut)
+docker compose up
+
+# Démarrage Docker avec simulation automatique
+SIMULATION_AUTOSTART=1 docker compose up
+```
+
+### Depuis le Dashboard Streamlit (accès rapide)
+
+Le bandeau en haut du dashboard contient 5 boutons de contrôle :
+
+| Bouton | Action | Quand disponible |
+|--------|--------|-----------------|
+| **▶ Démarrer** | Lance la boucle de simulation | Quand arrêtée ou en pause |
+| **⏸ Pause** | Suspend les ticks (état thermique conservé) | Quand en cours |
+| **▶ Reprendre** | Reprend depuis la pause | Quand en pause |
+| **⏹ Arrêter** | Arrête la boucle de simulation | Quand en cours |
+| **🗑 Reset** | Remet temps + énergie à 0, vide TimescaleDB | Toujours disponible |
+
+### Via l'API REST
+
+```bash
+# État de la simulation
+curl http://localhost:8000/simulation/status
+
+# Démarrer (ou reprendre si en pause)
+curl -X POST http://localhost:8000/simulation/start
+
+# Mettre en pause
+curl -X POST http://localhost:8000/simulation/pause
+
+# Reprendre
+curl -X POST http://localhost:8000/simulation/resume
+
+# Arrêter
+curl -X POST http://localhost:8000/simulation/stop
+
+# Reset complet (temps + énergie + TimescaleDB)
+curl -X POST http://localhost:8000/simulation/reset
+```
+
+**Réponses attendues :**
+```json
+{"ok": true, "message": "Simulation démarrée."}
+{"ok": true, "message": "Simulation mise en pause."}
+{"ok": true, "message": "Simulation reprise."}
+```
+
+### États possibles
+
+```
+stopped  →  start  →  running
+running  →  pause  →  paused
+paused   →  start  →  running   (équivalent à resume)
+paused   →  resume →  running
+running  →  stop   →  stopped
+paused   →  stop   →  stopped
+```
+
+---
+
 ## 🐛 Dépannage rapide
 
 ```bash

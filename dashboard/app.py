@@ -741,8 +741,15 @@ def main() -> None:
         speed_multiplier = 1.0
         speed_name = "Real-time"
 
+    # Récupérer l'état de la simulation
+    try:
+        sim_status_info = api._get("/simulation/status")
+        sim_status = sim_status_info.get("simulation_status", "stopped")
+    except Exception:
+        sim_status = "unknown"
+
     # En-tête avec scénario actif et vitesse de simulation
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.title("🌡️ Jumeaux Chauds — Digital Twin")
     with col2:
@@ -753,6 +760,70 @@ def main() -> None:
         st.markdown(f"<div style='text-align: right; padding-top: 12px;'>"
                    f"<b>Vitesse :</b><br/><code>{speed_name}</code>"
                    f"</div>", unsafe_allow_html=True)
+
+    # ── Bandeau de contrôle rapide (Phase 8.13) ─────────────────────────────
+    _SIM_STATUS_LABELS = {
+        "running": "🟢 En cours",
+        "paused":  "⏸ En pause",
+        "stopped": "⏹ Arrêtée",
+        "unknown": "❓ Inconnu",
+    }
+    st.markdown(
+        f"**Simulation :** {_SIM_STATUS_LABELS.get(sim_status, sim_status)}",
+        help="État courant de la boucle de simulation.",
+    )
+    ctrl_cols = st.columns(5)
+    with ctrl_cols[0]:
+        if st.button("▶ Démarrer", key="hdr_start",
+                     disabled=(sim_status == "running"),
+                     help="Démarre ou reprend la simulation"):
+            res = api._post("/simulation/start", {})
+            if res.get("ok"):
+                log_event("▶ Simulation démarrée")
+                st.rerun()
+            else:
+                st.error(res.get("error", "Erreur"))
+    with ctrl_cols[1]:
+        if st.button("⏸ Pause", key="hdr_pause",
+                     disabled=(sim_status != "running"),
+                     help="Met la simulation en pause (état conservé)"):
+            res = api._post("/simulation/pause", {})
+            if res.get("ok"):
+                log_event("⏸ Simulation mise en pause")
+                st.rerun()
+            else:
+                st.error(res.get("error", "Erreur"))
+    with ctrl_cols[2]:
+        if st.button("▶ Reprendre", key="hdr_resume",
+                     disabled=(sim_status != "paused"),
+                     help="Reprend depuis la pause"):
+            res = api._post("/simulation/resume", {})
+            if res.get("ok"):
+                log_event("▶ Simulation reprise")
+                st.rerun()
+            else:
+                st.error(res.get("error", "Erreur"))
+    with ctrl_cols[3]:
+        if st.button("⏹ Arrêter", key="hdr_stop",
+                     disabled=(sim_status == "stopped"),
+                     help="Arrête la simulation (conserve l'état)"):
+            res = api._post("/simulation/stop", {})
+            if res.get("ok"):
+                log_event("⏹ Simulation arrêtée")
+                st.rerun()
+            else:
+                st.error(res.get("error", "Erreur"))
+    with ctrl_cols[4]:
+        if st.button("🗑 Reset", key="hdr_reset",
+                     help="Reset complet : remet le temps et l'énergie à zéro, vide TimescaleDB"):
+            res = api._post("/simulation/reset", {})
+            if res.get("ok"):
+                log_event("🗑 Reset complet effectué")
+                st.rerun()
+            else:
+                st.error(res.get("error", "Erreur"))
+
+    st.divider()
 
     _detect_auto_events(snapshot)
     render_sidebar(snapshot)
