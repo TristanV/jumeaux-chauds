@@ -1260,6 +1260,83 @@ Les profils `sine_wave`, `ramp_with_spikes`, `constant` et `step` sont inchangé
 
 ---
 
+### 14.7 Trace Replay — Phase 8.14B
+
+#### Trois modes d'utilisation
+
+| Mode | Source des données | Prérequis | Cas d'usage |
+|------|-------------------|-----------|-------------|
+| **A — Embarqué** | `data/traces/*.csv` (synthétiques) | Aucun | Démo, TP, CI/CD |
+| **B — Bitbrains réel** | Dataset Bitbrains FastStorage | `scripts/download_traces.py` (~30 MB) | Benchmark reproductible, recherche |
+| **C — Export simulation** | `scripts/generate_dataset.py` → CSV | Python seul | Reproductibilité, isolation variable |
+
+#### Mode A — Traces embarquées
+
+```bash
+# Démarrage immédiat, aucun prérequis
+SCENARIO=trace_replay docker compose up -d
+```
+
+4 traces synthétiques dans `data/traces/` reproduisent les statistiques publiées
+du dataset Bitbrains FastStorage (cycles journaliers/hebdomadaires, bruit organique).
+
+#### Mode B — Dataset Bitbrains réel
+
+```bash
+python scripts/download_traces.py          # télécharge + convertit (~30 MB)
+python scripts/download_traces.py --list   # liste les traces disponibles
+```
+
+Le script `scripts/download_traces.py` :
+- Tente plusieurs miroirs du dataset Bitbrains FastStorage
+- Convertit le format brut (`;`, millisecondes, MHz) au format CSV standard
+- Dépose les fichiers dans `data/traces/`
+
+Format brut → converti : `cpu_percent = cpu_mhz_used / cpu_mhz_cap × 100`, puis normalisé ÷ 100.
+
+#### Mode C — Export depuis generate_dataset.py
+
+```bash
+python scripts/generate_dataset.py --scenario stress --duration 30d \
+  --output data/traces/stress_30j.csv --format csv
+```
+
+Le CSV exporté contient `timestamp_s` (temps relatif, secondes) et `load_factor` (valeur [0,1]).
+Le profil `trace_replay` détecte automatiquement la colonne et l'utilise directement.
+
+#### Architecture _TraceReplay
+
+```
+_TraceReplay.__init__()
+  ├── Résolution chemin (absolu ou relatif à la racine projet)
+  ├── Lecture CSV (DictReader)
+  ├── Détection colonne : load_factor (direct) | cpu_percent (÷100)
+  └── Validation : ≥2 points, timestamp_s présent
+
+_TraceReplay.get(t_elapsed_s)
+  ├── Application speed_factor : t_trace = t_elapsed_s × speed_factor
+  ├── Loop : t_trace = t_origin + (t_trace % duration)   si loop=True
+  │          t_trace = min(t_trace, t_last)               si loop=False
+  ├── Recherche binaire (np.searchsorted) du segment encadrant
+  └── Interpolation linéaire : v = v0 + α × (v1 - v0)
+```
+
+Chargement **paresseux** : la trace est lue au premier appel de `get_load_factor()`,
+pas à l'instanciation de `ScenarioEngine`. Mise en cache pour toute la durée de la simulation.
+
+#### Format CSV — colonnes supportées
+
+| Colonne | Obligatoire | Description |
+|---------|------------|-------------|
+| `timestamp_s` | ✅ | Temps relatif en secondes depuis le début de la trace |
+| `cpu_percent` | ✅ (ou `load_factor`) | Utilisation CPU [0–100] → normalisé ÷100 |
+| `load_factor` | ✅ (ou `cpu_percent`) | Charge directe [0.0–1.0] |
+| Autres colonnes | ✗ | Ignorées silencieusement |
+
+**→ Documentation opérationnelle complète : [`documents/TRACE_REPLAY_GUIDE.md`](TRACE_REPLAY_GUIDE.md)**
+
+---
+
 *Tristan Vanrullen — La Plateforme, Marseille — 2026*
 
 ---

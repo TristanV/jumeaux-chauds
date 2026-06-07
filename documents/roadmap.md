@@ -171,6 +171,7 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
       - [x] 8.14B.6 — scripts/generate_dataset.py : ajout colonne timestamp_s relative (export directement rejouable)
       - [x] 8.14B.7 — tests/test_load_profiles.py : 15 tests (TestTraceReplay + TestTraceReplayEngine : chargement, interpolation, loop, speed_factor, erreurs)
       - [x] 8.14B.8 — tests/test_machine_yaml_integration.py : 2 tests YAML (trace_replay profile, fault_injection disabled)
+      - [x] 8.14B.9 — documents/TRACE_REPLAY_GUIDE.md : guide complet (3 modes A/B/C, référence YAML, format CSV, changement à chaud)
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
