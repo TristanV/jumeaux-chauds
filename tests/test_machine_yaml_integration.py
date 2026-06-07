@@ -210,14 +210,14 @@ class TestFanConfiguration:
         master_cfg = get_machine_config(cfg, "srv-master-01")
 
         assert master_cfg.fans.auto_policy.type == "proportional"
-        assert master_cfg.fans.auto_policy.gain_rpm_per_c == 50.0
+        assert master_cfg.fans.auto_policy.gain_rpm_per_c == 30.0  # Phase 8.15 : réduit 50→30
 
     def test_worker_fan_gain_different(self) -> None:
-        """Vérifie que le gain des fans worker est 45.0 (vs 50.0 pour master)."""
+        """Vérifie que le gain des fans worker est 28.0 (vs 30.0 pour master) — Phase 8.15."""
         cfg = load_config("nominal")
         worker_cfg = get_machine_config(cfg, "srv-worker-01")
 
-        assert worker_cfg.fans.auto_policy.gain_rpm_per_c == 45.0
+        assert worker_cfg.fans.auto_policy.gain_rpm_per_c == 28.0  # Phase 8.15 : réduit 45→28
 
 
 class TestClusterInstantiation:
@@ -363,7 +363,7 @@ class TestFaultInjectionConfig:
         )
 
         assert fan_fault.shape == 1.5
-        assert fan_fault.scale_s == 7200
+        assert fan_fault.scale_s == 14400  # Phase 8.15b : relevé 7200→14400 (~4h MTBF)
 
 
 class TestLoadProfileConfig:
@@ -395,9 +395,9 @@ class TestLoadProfileConfig:
 
         lp = cfg.simulation.load_profile
         assert lp.type == "composite_stress"
-        assert lp.base_load == pytest.approx(0.55)
+        assert lp.base_load == pytest.approx(0.52)   # Phase 8.15b : réduit 0.55→0.52
         assert lp.spike_probability == pytest.approx(0.005)
-        assert lp.drift_max == pytest.approx(0.25)
+        assert lp.drift_max == pytest.approx(0.0)    # Phase 8.15b : dérive désactivée
 
     def test_busy_weeks_perlin_noise_profile(self) -> None:
         """Vérifie que busy_weeks utilise perlin_noise (Phase 8.14)."""
@@ -405,7 +405,7 @@ class TestLoadProfileConfig:
 
         lp = cfg.simulation.load_profile
         assert lp.type == "perlin_noise"
-        assert lp.base_load == pytest.approx(0.48)
+        assert lp.base_load == pytest.approx(0.40)  # Phase 8.15b : ramené 0.48→0.40
         assert lp.n_octaves == 5
 
     def test_heatwave_multi_scale_sine_profile(self) -> None:
@@ -414,7 +414,7 @@ class TestLoadProfileConfig:
 
         lp = cfg.simulation.load_profile
         assert lp.type == "multi_scale_sine"
-        assert lp.base_load == pytest.approx(0.58)
+        assert lp.base_load == pytest.approx(0.50)   # Phase 8.15b : réduit 0.58→0.50
 
     def test_trace_replay_profile(self) -> None:
         """Vérifie que trace_replay se charge correctement (Phase 8.14B)."""

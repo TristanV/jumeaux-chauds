@@ -353,7 +353,9 @@ simulation:
     enabled: false
 ```
 
-### 4.5 `config/scenarios/stress.yaml`
+### 4.5 `config/scenarios/stress.yaml` — Phase 8.14/8.15b
+
+**Risque thermique cible :** CRITICAL (2–5 overheats/h) — scénario de crise maximale.
 
 ```yaml
 simulation:
@@ -363,16 +365,17 @@ simulation:
   duration: "0"
 
   # Phase 8.14 : composite_stress — profil haute fidélité
+  # Phase 8.15b : drift désactivée, pannes modérées pour CRITICAL réaliste (~2-4 OH/h)
   load_profile:
     type: "composite_stress"
-    base_load: 0.55
+    base_load: 0.52             # réduit (0.55→0.52) — Phase 8.15b
     daily_amplitude: 0.18
     daily_period_s: 86400.0
     daily_phase_s: -21600.0
     weekly_amplitude: 0.08
     weekly_period_s: 604800.0
-    drift_rate: 2.0e-5          # +25% sur ~12 500s simulées
-    drift_max: 0.25
+    drift_rate: 0.0             # désactivé Phase 8.15b (causait emballement longue durée)
+    drift_max: 0.0
     spike_probability: 0.005    # ~0.5% de chance par tick
     spike_magnitude: 0.25
     perlin_scale: 0.0003
@@ -393,16 +396,16 @@ simulation:
       - type: "fan_failure"
         distribution: "weibull"
         shape: 1.5
-        scale_s: 7200
+        scale_s: 14400          # ~4h MTBF — Phase 8.15b (était 7200 = 2h, trop violent)
         magnitude: 1.0
       - type: "sensor_drift"
         distribution: "exponential"
-        scale_s: 3600
+        scale_s: 7200           # ~2h MTBF (inchangé)
         magnitude: 0.5
       - type: "power_surge"
         distribution: "uniform"
-        probability_per_tick: 0.0002
-        magnitude: 1.30
+        probability_per_tick: 0.00008  # réduit Phase 8.15b (était 0.0002)
+        magnitude: 1.25         # réduit (était 1.30)
     recovery_delay_s: 120.0
 ```
 
@@ -991,145 +994,101 @@ def test_temperature_stabilizes_with_fans():
 
 ## 14. Extensions pédagogiques — Phase 8
 
-### 14.1 Scénario Heatwave (Vague de chaleur)
+### 14.1 Scénario Heatwave (Vague de chaleur) — Phase 8.14/8.15
 
-**Objectif :** Simuler une vague de chaleur avec saisonnalité progressive — température ambiante fluctuante, phases de hausse/baisse, paramétrable en durée et amplitude.
+**Objectif :** Simuler un datacenter en période de canicule — température ambiante élevée (32°C), charge soutenue, pannes ventilateurs plus fréquentes sous stress thermique.
 
 **Localisation :** `config/scenarios/heatwave.yaml`
 
-**Paramètres :**
+**Risque thermique cible :** HIGH (0.5–2.0 overheats/h en moyenne sur cluster 5 machines)
+
+**Profil de charge :** `multi_scale_sine` — superposition de cycles horaire, journalier et hebdomadaire avec une charge de fond élevée (0.50).
+
+**Points clés :**
+- `ambient_temp_c = 32°C` appliqué programmatiquement (override dans `analyze_thermal_risk.py`) — réduit la marge thermique de 68°C à 58°C pour les masters, 56°C pour les workers
+- `noise.drift` désactivé : l'ambient élevé suffit à créer le stress thermique sans emballement sur longue durée
+- `fan_failure` : MTBF ~10h par machine (Weibull shape=1.2, scale_s=36000) — réaliste pour un stress mécanique sur roulements sous chaleur
+- `power_surge` : rare (3×10⁻⁵/tick), magnitude +10%
+
 ```yaml
-heatwave:
-  # Base
-  base_load_profile: "sine_wave"
-  base_amplitude: 0.3
-  base_offset: 0.4
-  
-  # Saisonnalité température ambiante
-  ambient:
-    base_temp_c: 28.0                    # T_amb de base (vague de chaleur)
-    seasonal_amplitude_c: 5.0             # Amplitude des fluctuations
-    seasonal_period_s: 14400.0            # Période jour/nuit (4h) ou semaine (14400s = 4h)
-    drift_enabled: true                   # Hausse progressive T_amb
-    drift_rate_c_per_hour: 0.5            # Hausse °C/heure (ex: +0.5°C/h = +12°C/24h)
-    drift_max_c: 35.0                     # Plafond T_amb
-    
-  # Pics de charge (rush hour)
-  load:
-    base_profile: "sine_wave"
-    rush_hour_enabled: true
-    rush_hours:
-      - start_hour: 9
-        end_hour: 12
-        load_multiplier: 1.5              # +50% charge 9h-12h
-      - start_hour: 14
-        end_hour: 17
-        load_multiplier: 1.3
-    
-  # Pannes accélérées en conditions de chaleur
-  faults:
-    base_rate: 0.001                      # Base fault rate
-    temp_sensitivity: true                # Pannes plus fréquentes si T > seuil
-    temp_threshold_c: 32.0
-    rate_multiplier_hot: 3.0              # 3× plus de pannes quand T > 32°C
-    duration_distribution: "exponential"
-    mean_duration_s: 1800.0               # 30 min en moyenne
+simulation:
+  mode: "heatwave"
+  load_profile:
+    type: "multi_scale_sine"
+    base_load: 0.50
+    daily_amplitude: 0.22
+    daily_period_s: 86400.0
+  noise:
+    drift:
+      enabled: false        # désactivé : ambient=32°C suffit
+  fault_injection:
+    enabled: true
+    faults:
+      - type: "fan_failure"
+        distribution: "weibull"
+        shape: 1.2
+        scale_s: 36000      # ~10h MTBF
+        magnitude: 1.0
+      - type: "power_surge"
+        distribution: "uniform"
+        probability_per_tick: 0.00003
+        magnitude: 1.10
+    recovery_delay_s: 90.0
 ```
 
-**Comportement :**
-1. **Température ambiante progressive** : T_amb débute à 28°C, augmente de 0.5°C/h jusqu'à 35°C (24h de simulation)
-2. **Oscillations jour/nuit** : ±5°C autour de la tendance moyenne (période 4h)
-3. **Pics de charge** : heures de bureau (9-12h, 14-17h) → machines surexploitées
-4. **Pannes cascadantes** : au-delà de 32°C, taux de panne × 3 (vieillissement accéléré sous stress thermique)
-5. **Refroidissement limité** : fans au max mais T_amb trop élevée → capacité de refroidissement réduite
-
 **Cas d'usage pédagogique :**
-- Observer dégradation progressive des performances sous stress thermique
-- Analyser corrélation entre T_amb et taux de pannes
-- Tester limites du système de refroidissement
-- Dimensionner les ressources (UPS, climatisation) pour résilience
+- Observer la réduction de marge thermique sous T_amb élevée
+- Analyser l'impact d'un fan_failure en conditions de canicule (cascade surchauffe)
+- Tester les limites du régulateur fan en mode auto avec gain réduit (Phase 8.15)---
 
----
+### 14.2 Scénario Busy Weeks (Semaines chargées) — Phase 8.14/8.15
 
-### 14.2 Scénario Busy Weeks (Semaines chargées)
-
-**Objectif :** Simuler charge réseau réaliste avec weekend calme, rush hours, heures creuses — paramétrable pour modéliser cycles de travail.
+**Objectif :** Simuler des semaines de charge soutenue avec variabilité organique (Perlin noise) — conditions normales d'exploitation intensive, sans stress thermique extrême, avec pannes rares.
 
 **Localisation :** `config/scenarios/busy_weeks.yaml`
 
-**Paramètres :**
+**Risque thermique cible :** MEDIUM (0.1–0.5 overheats/h en moyenne sur cluster 5 machines, selon les pics de charge Perlin)
+
+**Profil de charge :** `perlin_noise` — bruit multifractal organique, non répétitif, mimant une charge datacenter réelle sur plusieurs jours.
+
+**Points clés :**
+- `base_load = 0.40`, `amplitude = 0.30` : charge modérée laissant une marge thermique confortable sans panne
+- Les machines n'atteignent le shutdown que lors d'un `fan_failure` combiné à un pic de charge
+- `fan_failure` : MTBF ~80h par machine (scale_s=288000) — usure normale en exploitation continue
+- `sensor_drift` : MTBF ~40h (scale_s=144000) — dérive capteur par poussière ou vieillissement
+- `power_surge` : très rare (8×10⁻⁶/tick) — pic réseau aléatoire
+
 ```yaml
-busy_weeks:
-  # Cycle semaine (en secondes)
-  week_cycle_s: 604800.0                  # 7 jours = 604800s
-  
-  # Simulation d'une journée standard (lundi-vendredi)
-  weekday:
-    # Heures creuses (00:00-07:00)
-    off_peak:
-      hours: [0, 1, 2, 3, 4, 5, 6, 7]
-      load_factor: 0.1                    # 10% charge (services background)
-      
-    # Montée progressive (07:00-09:00)
-    ramp_up:
-      hours: [7, 8, 9]
-      load_start: 0.1
-      load_end: 0.6
-      
-    # Rush hour matin (09:00-12:00)
-    morning_rush:
-      hours: [9, 10, 11, 12]
-      load_factor: 0.75                   # 75% charge
-      
-    # Pause midi (12:00-14:00)
-    midday_break:
-      hours: [12, 13, 14]
-      load_factor: 0.4
-      
-    # Rush hour après-midi (14:00-18:00)
-    afternoon_rush:
-      hours: [14, 15, 16, 17, 18]
-      load_factor: 0.8                    # 80% charge
-      
-    # Décroissance (18:00-20:00)
-    ramp_down:
-      hours: [18, 19, 20]
-      load_start: 0.8
-      load_end: 0.2
-      
-    # Nuit (20:00-23:59)
-    night:
-      hours: [20, 21, 22, 23]
-      load_factor: 0.15                   # 15% charge
-  
-  # Weekend (samedi, dimanche) : complètement calme
-  weekend:
-    load_factor: 0.05                     # 5% charge (maintenance minimal)
-    
-  # Anomalies hebdomadales
-  anomalies:
-    monday_spike: true                    # Pic de charge lundi 9h (rattrapage)
-    monday_spike_load: 0.95
-    friday_evening_drop: true             # Charge réduite vendredi après 16h
-    friday_evening_load: 0.3
+simulation:
+  mode: "busy_weeks"
+  load_profile:
+    type: "perlin_noise"
+    base_load: 0.40
+    amplitude: 0.30
+    n_octaves: 5
+  fault_injection:
+    enabled: true
+    faults:
+      - type: "fan_failure"
+        distribution: "weibull"
+        shape: 1.5
+        scale_s: 288000     # ~80h MTBF
+        magnitude: 1.0
+      - type: "sensor_drift"
+        distribution: "exponential"
+        scale_s: 144000     # ~40h MTBF
+        magnitude: 0.2
+      - type: "power_surge"
+        distribution: "uniform"
+        probability_per_tick: 0.000008
+        magnitude: 1.15
+    recovery_delay_s: 120.0
 ```
 
-**Comportement :**
-1. **Cycle 7 jours** : lundi-vendredi = journée normale, samedi-dimanche = repos
-2. **Heures creuses** : 00:00-07:00 & 20:00-23:59 → 10-15% charge
-3. **Rush hours** : 9-12h & 14-18h → 75-80% charge (appels simultanés, traitements batch)
-4. **Pause midi** : 12-14h → 40% charge (lunch break)
-5. **Weekend** : 5% charge (backup, monitoring seulement)
-6. **Anomalies hebdomadales** : lundi +20% charge, vendredi -30% charge après 16h
-
 **Cas d'usage pédagogique :**
-- Dimensionner infrastructure pour pics de charge réalistes
-- Analyser cycles d'utilisation énergétique
-- Optimiser scheduling de tâches (batch le weekend?)
-- Prédire hotspots thermiques par jour/heure
-- Valider auto-scaling policies
-
----
+- Générer un corpus ML avec des pannes rares mais réalistes (signal rare, bruit faible)
+- Observer la corrélation entre pic Perlin et montée thermique
+- Tester la détection précoce de fan_failure avant surchauffe (maintenance prédictive)---
 
 ### 14.3 Observateur MQTT recommandé
 

@@ -6,8 +6,8 @@ simulation:
 
   load_profile:
     type: "perlin_noise"
-    base_load: 0.52
-    amplitude: 0.35
+    base_load: 0.40               # Phase 8.15b : ramené à 0.40 pour MEDIUM réaliste
+    amplitude: 0.30               # réduit (0.35→0.30) pour réduire les pics de charge
     scale: 0.00005
     n_octaves: 5
     persistence: 0.55
@@ -26,17 +26,22 @@ simulation:
   fault_injection:
     enabled: true
     faults:
+      # Fan_failure : MTBF ~20h par machine (scale_s=72000)
+      # Avec 5 machines : ~1 panne ventilateur toutes les ~4h en moyenne
+      # Réaliste pour des semaines de charge soutenue (usure normale)
       - type: "fan_failure"
         distribution: "weibull"
         shape: 1.5
-        scale_s: 72000
+        scale_s: 288000            # ~80h MTBF (Phase 8.15b : ~1 panne/16h cluster, MEDIUM réaliste)
         magnitude: 1.0
+      # Sensor_drift : dérive capteur (erreur de mesure, poussière)
       - type: "sensor_drift"
         distribution: "exponential"
-        scale_s: 36000
-        magnitude: 0.3
+        scale_s: 144000            # ~40h MTBF (Phase 8.15b)
+        magnitude: 0.2             # magnitude réduite (0.3→0.2)
+      # Power_surge rare (pic réseau aléatoire)
       - type: "power_surge"
         distribution: "uniform"
-        probability_per_tick: 0.00002
-        magnitude: 1.20
+        probability_per_tick: 0.000008  # réduit (0.00002→0.000008), ~10% de stress
+        magnitude: 1.15
     recovery_delay_s: 120.0

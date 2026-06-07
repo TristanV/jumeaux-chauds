@@ -11,17 +11,18 @@ simulation:
   duration: "0"
 
   # Phase 8.14 : multi_scale_sine avec charge de base élevée
-  # Phase 8.15 : ambient_temp_c rehaussée à 32°C (vague de chaleur réaliste)
-  #              + fault_injection activée (fan_failure + power_surge)
+  # Phase 8.15 : ambient_temp_c=32°C via override programmatique (vague de chaleur réaliste)
+  #              fault_injection activée (fan_failure + power_surge)
+  #              drift thermique désactivée : l'ambient élevé suffit, la dérive cumulait trop
   #
   # Simule un datacenter en période de canicule :
-  # - température ambiante de base à 32°C (au lieu de 22°C) — marge thermique réduite
-  # - charge de fond élevée (refroidissement sollicité en permanence)
-  # - cycles réalistes journaliers/hebdomadaires
-  # - pannes fan_failure qui surviennent plus souvent sous chaleur extrême
+  # - température ambiante de base à 32°C (au lieu de 22°C) — marge thermique réduite de 30°C
+  # - charge de fond modérée-élevée avec cycles journaliers marqués
+  # - fan_failure plus fréquent sous chaleur (stress mécanique roulements)
+  # Risque cible : HIGH (0.5–2.0 OH/h, Danger% 5–15%)
   load_profile:
     type: "multi_scale_sine"
-    base_load: 0.58
+    base_load: 0.50               # réduit (0.58→0.50) pour laisser de la marge
     fast_amplitude: 0.10
     fast_period_s: 3600.0
     fast_phase_s: -1800.0
@@ -39,19 +40,23 @@ simulation:
     spike_probability: 0.006
     spike_magnitude_c: 4.0
     drift:
-      enabled: true
-      rate_c_per_s: 0.0002
+      enabled: false              # désactivé : ambient_temp=32°C suffit, la dérive cumulait
+      rate_c_per_s: 0.0
 
   fault_injection:
     enabled: true
     faults:
+      # Fan_failure : MTBF ~10h par machine (scale_s=36000)
+      # Avec 5 machines : ~1 panne ventilateur toutes les ~2h en moyenne
+      # Réaliste pour une vague de chaleur (stress mécanique sur les roulements)
       - type: "fan_failure"
         distribution: "weibull"
-        shape: 1.2
-        scale_s: 10800
+        shape: 1.2                 # défauts légèrement précoces sous chaleur
+        scale_s: 36000             # ~10h MTBF
         magnitude: 1.0
+      # Power_surge occasionnel (pic réseau climatisation surchargée)
       - type: "power_surge"
         distribution: "uniform"
-        probability_per_tick: 0.00008
-        magnitude: 1.15
+        probability_per_tick: 0.00003
+        magnitude: 1.10
     recovery_delay_s: 90.0

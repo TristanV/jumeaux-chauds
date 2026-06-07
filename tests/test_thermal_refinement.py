@@ -294,7 +294,13 @@ class TestThermalEquilibrium:
             f"Temperature unstable at low load (delta > 1.5C): {t_converged}C -> {t_final}C"
 
     def test_thermal_equilibrium_high_load(self):
-        """A charge elevee, T converge vers T_eq stable."""
+        """A charge elevee, T converge vers T_eq stable.
+
+        Phase 8.15 : gain_rpm_per_c réduit (50→30) — les fans montent plus lentement,
+        la convergence nécessite ~5000 ticks (500s simulées) au lieu de 500.
+        L'équilibre existe bien (~88°C à charge 0.8), mais le temps de convergence
+        est plus long, ce qui est le comportement voulu (risque thermique réaliste).
+        """
         cfg = load_config("nominal")
         sim = ClusterSimulator(cfg)
         machine = sim.machines["srv-master-01"]
@@ -302,12 +308,13 @@ class TestThermalEquilibrium:
 
         load_factor = 0.8
 
-        for _ in range(500):
+        # Warm-up suffisant pour atteindre l'équilibre avec gain réduit (Phase 8.15)
+        for _ in range(5000):
             machine.tick(load_factor=load_factor, dt=0.1)
 
         t_converged = machine.temperature_c
 
-        for _ in range(200):
+        for _ in range(1000):
             machine.tick(load_factor=load_factor, dt=0.1)
 
         t_final = machine.temperature_c
