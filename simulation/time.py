@@ -6,7 +6,7 @@ Ce module fournit des utilitaires pour :
 - Générer des timestamps ISO pour MQTT/API/snapshots
 
 Convention : tout le temps dans la simulation est relatif à une date de
-départ (défaut: datetime.now(UTC) si non configurée) + temps écoulé en secondes.
+départ (défaut: 2005-01-01T00:00:00Z) + temps écoulé en secondes.
 """
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ def parse_start_time(start_time_str: Optional[str]) -> datetime:
         ValueError: Si le format est invalide
     """
     if start_time_str is None:
-        # Défaut : maintenant (heure réelle UTC)
-        return datetime.now(timezone.utc).replace(microsecond=0)
+        # Défaut : 1er janvier 2005 00:00:00 UTC
+        return datetime(2005, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
     try:
         # Parse ISO 8601 (avec ou sans Z)

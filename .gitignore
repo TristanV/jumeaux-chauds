@@ -31,6 +31,9 @@ htmlcov/
 *.swp
 *.swo
 
+# Traces CSV (fichiers lourds — à télécharger via scripts/download_traces.py)
+data/traces/*.csv
+
 # Docker volumes locaux
 mosquitto/data/
 mosquitto/log/

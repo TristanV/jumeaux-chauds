@@ -46,6 +46,8 @@ services:
       TIMESCALE_DB: jumeaux
       TIMESCALE_USER: jumeaux
       TIMESCALE_PASSWORD: ${POSTGRES_PASSWORD:-jumeaux}
+    volumes:
+      - ./data/traces:/app/data/traces:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 15s

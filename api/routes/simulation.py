@@ -114,8 +114,9 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
         params={k: v for k, v in lp.items() if k != "type"},
     )
 
-    # Validation anticipée pour trace_replay : vérifier que le fichier CSV existe
-    # avant de remplacer le scenario_engine (évite un crash silencieux dans run())
+    # Vérification anticipée pour trace_replay : avertir si le fichier CSV est absent
+    # (ne bloque pas — la boucle run() continuera en fallback load_factor=0.5)
+    warning = None
     if lp["type"] == "trace_replay":
         from pathlib import Path
         trace_file = lp.get("trace_file", "data/traces/bitbrains_week_vm00.csv")
@@ -124,14 +125,12 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
             project_root = Path(__file__).parent.parent.parent
             trace_path = project_root / trace_file
         if not trace_path.exists():
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Fichier de trace introuvable : {trace_path}\n"
-                    f"Lancez scripts/download_traces.py pour télécharger les traces Bitbrains, "
-                    f"ou vérifiez le chemin 'trace_file' dans le YAML du scénario."
-                ),
+            warning = (
+                f"Fichier de trace introuvable : {trace_file}. "
+                f"La simulation tourne en fallback (load_factor=0.5). "
+                f"Lancez scripts/download_traces.py pour télécharger les traces Bitbrains."
             )
+            logger.warning(warning)
 
     simulator._scenario_engine = ScenarioEngine(profile_cfg=lp_cfg)
 
@@ -140,10 +139,10 @@ async def change_scenario(cmd: ScenarioChangeCommand) -> CommandResponse:
 
     logger.info("Scénario changé → '%s'", cmd.scenario)
 
-    return CommandResponse(
-        ok=True,
-        message=f"Scénario changé vers '{cmd.scenario}' (profil: {lp['type']}).",
-    )
+    msg = f"Scénario changé vers '{cmd.scenario}' (profil: {lp['type']})."
+    if warning:
+        msg += f" ⚠️ {warning}"
+    return CommandResponse(ok=True, message=msg)
 
 
 # ------------------------------------------------------------------

@@ -190,15 +190,28 @@ class _TraceReplay:
 
         Si loop=True, la trace se répète après sa durée totale.
         Si loop=False, reste sur la dernière valeur après la fin.
+
+        speed_factor > 1 → la trace dure plus longtemps (lecture ralentie)
+        speed_factor < 1 → la trace dure moins longtemps (lecture accélérée)
         """
-        t = t_elapsed_s * self._speed_factor
+        # Diviser par speed_factor : à t_sim=300 avec speed_factor=2.0,
+        # on est à t_trace=150 (la trace avance 2× plus lentement)
+        t_trace = t_elapsed_s / self._speed_factor
+
+        t_origin = self._timestamps[0]
 
         if self._loop and self._duration > 0:
-            # Décalage par rapport à l'origine de la trace
-            t_origin = self._timestamps[0]
-            t = t_origin + (t % self._duration)
+            # Modulo sur le temps relatif à l'origine
+            t_rel = t_trace - t_origin
+            t_mod = t_rel % self._duration
+            # Si t_mod == 0 et on n'est pas au tout début, on est exactement
+            # à la fin d'un cycle → pointer sur le dernier point de la trace
+            if t_mod == 0.0 and t_rel > 0.0:
+                t = self._timestamps[-1]
+            else:
+                t = t_origin + t_mod
         else:
-            t = min(t, self._timestamps[-1])
+            t = min(t_trace, self._timestamps[-1])
 
         # Interpolation linéaire
         idx = np.searchsorted(self._timestamps, t, side="right") - 1
