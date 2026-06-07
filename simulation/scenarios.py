@@ -16,10 +16,13 @@ multi_scale_sine  | 3 sinusoïdes superposées (journalier + hebdo + rapide)
 perlin_noise      | Bruit de Perlin multi-octaves (organique, non-répétitif)
 markov_chain      | Chaîne de Markov à 4 états (idle/moderate/heavy/burst)
 composite_stress  | multi_scale_sine + heatwave drift + spikes — scénario stress réaliste
+trace_replay      | Rejoue une trace CSV réelle (Bitbrains ou export generate_dataset.py)
 """
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -96,6 +99,132 @@ _PERLIN = _Perlin1D(seed=42)
 
 
 # ---------------------------------------------------------------------------
+# Trace replay — chargeur et interpolateur de traces CSV
+# ---------------------------------------------------------------------------
+
+class _TraceReplay:
+    """Charge une trace CSV et retourne un load_factor interpolé pour tout t.
+
+    Colonnes CSV attendues (au choix) :
+      - timestamp_s + cpu_percent  → load_factor = cpu_percent / 100
+      - timestamp_s + load_factor  → utilisé directement
+
+    Paramètres :
+      - trace_file   : chemin du fichier CSV (absolu ou relatif à la racine projet)
+      - loop         : si True, la trace se répète en boucle (défaut True)
+      - speed_factor : étire ou compresse la trace dans le temps (défaut 1.0 = durée réelle)
+                       ex: 2.0 → la trace dure 2× plus longtemps dans la simulation
+
+    La valeur est interpolée linéairement entre les deux points de trace encadrant t.
+    """
+
+    def __init__(
+        self,
+        trace_file: str,
+        loop: bool = True,
+        speed_factor: float = 1.0,
+    ) -> None:
+        self._loop = loop
+        self._speed_factor = max(0.001, float(speed_factor))
+
+        # Résolution du chemin : absolu ou relatif à la racine du projet
+        path = Path(trace_file)
+        if not path.is_absolute():
+            # Chercher depuis la racine du projet (2 niveaux au-dessus de simulation/)
+            project_root = Path(__file__).parent.parent
+            path = project_root / trace_file
+
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Fichier de trace introuvable : {path}\n"
+                f"  (chemin fourni : {trace_file})\n"
+                f"  Les traces sont dans data/traces/. "
+                f"Lancez scripts/download_traces.py pour télécharger Bitbrains."
+            )
+
+        self._timestamps: list[float] = []
+        self._loads: list[float] = []
+        self._load_csv(path)
+
+        if len(self._timestamps) < 2:
+            raise ValueError(f"La trace {trace_file} contient moins de 2 points — invalide.")
+
+        self._duration = self._timestamps[-1] - self._timestamps[0]
+
+    def _load_csv(self, path: Path) -> None:
+        """Charge le CSV et détecte la colonne de charge."""
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames or []
+
+            # Détecter la colonne de charge
+            if "load_factor" in fieldnames:
+                load_col = "load_factor"
+                scale = 1.0
+            elif "cpu_percent" in fieldnames:
+                load_col = "cpu_percent"
+                scale = 0.01  # ÷100 pour normaliser
+            else:
+                raise ValueError(
+                    f"Le CSV {path.name} doit contenir 'load_factor' ou 'cpu_percent'. "
+                    f"Colonnes trouvées : {fieldnames}"
+                )
+
+            if "timestamp_s" not in fieldnames:
+                raise ValueError(
+                    f"Le CSV {path.name} doit contenir 'timestamp_s'. "
+                    f"Colonnes trouvées : {fieldnames}"
+                )
+
+            for row in reader:
+                try:
+                    ts = float(row["timestamp_s"])
+                    load = float(row[load_col]) * scale
+                    self._timestamps.append(ts)
+                    self._loads.append(float(np.clip(load, 0.0, 1.0)))
+                except (ValueError, KeyError):
+                    continue  # Ignorer les lignes malformées
+
+    def get(self, t_elapsed_s: float) -> float:
+        """Retourne le load_factor interpolé pour t_elapsed_s.
+
+        Si loop=True, la trace se répète après sa durée totale.
+        Si loop=False, reste sur la dernière valeur après la fin.
+        """
+        t = t_elapsed_s * self._speed_factor
+
+        if self._loop and self._duration > 0:
+            # Décalage par rapport à l'origine de la trace
+            t_origin = self._timestamps[0]
+            t = t_origin + (t % self._duration)
+        else:
+            t = min(t, self._timestamps[-1])
+
+        # Interpolation linéaire
+        idx = np.searchsorted(self._timestamps, t, side="right") - 1
+        idx = int(np.clip(idx, 0, len(self._timestamps) - 2))
+
+        t0 = self._timestamps[idx]
+        t1 = self._timestamps[idx + 1]
+        v0 = self._loads[idx]
+        v1 = self._loads[idx + 1]
+
+        if t1 == t0:
+            return float(v0)
+
+        alpha = (t - t0) / (t1 - t0)
+        return float(np.clip(v0 + alpha * (v1 - v0), 0.0, 1.0))
+
+    @property
+    def n_points(self) -> int:
+        return len(self._timestamps)
+
+    @property
+    def duration_s(self) -> float:
+        return self._duration
+
+
+# ---------------------------------------------------------------------------
 # Moteur de scénarios
 # ---------------------------------------------------------------------------
 
@@ -110,6 +239,8 @@ class ScenarioEngine:
         # État interne pour les profils avec mémoire (Markov)
         self._markov_state: int = 1       # état courant (0=idle, 1=moderate, 2=heavy, 3=burst)
         self._markov_next_change: float = 0.0  # prochain changement d'état (en t_elapsed_s)
+        # Trace replay : chargée paresseusement à la première utilisation
+        self._trace: _TraceReplay | None = None
 
     def get_load_factor(self, t_elapsed_s: float) -> float:
         """Retourne un facteur de charge dans [0, 1] pour un temps donné."""
@@ -128,7 +259,7 @@ class ScenarioEngine:
         if ptype == "step":
             return self._step(t, **params)
 
-        # ── Nouveaux profils Phase 8.14 ──────────────────────────────────
+        # ── Nouveaux profils Phase 8.14A ─────────────────────────────────
         if ptype == "multi_scale_sine":
             return self._multi_scale_sine(t, **params)
         if ptype == "perlin_noise":
@@ -137,6 +268,10 @@ class ScenarioEngine:
             return self._markov_chain(t, **params)
         if ptype == "composite_stress":
             return self._composite_stress(t, **params)
+
+        # ── Phase 8.14B : trace replay ───────────────────────────────────
+        if ptype == "trace_replay":
+            return self._trace_replay(t, **params)
 
         # Profil inconnu → charge nulle (comportement sûr)
         return 0.0
@@ -382,6 +517,42 @@ class ScenarioEngine:
         texture = perlin_amplitude * perlin_raw
 
         return float(np.clip(cyclic + drift + spike + texture, 0.0, 1.0))
+
+    def _trace_replay(
+        self,
+        t: float,
+        trace_file: str = "data/traces/bitbrains_week_vm00.csv",
+        loop: bool = True,
+        speed_factor: float = 1.0,
+    ) -> float:
+        """Rejoue une trace CSV réelle comme profil de charge.
+
+        Paramètres YAML :
+          trace_file   : chemin du CSV (relatif à la racine du projet ou absolu)
+          loop         : si True, la trace se répète en boucle (défaut : True)
+          speed_factor : compression/dilatation temporelle de la trace (défaut : 1.0)
+                         ex: 0.5 → la trace est jouée 2× plus vite
+
+        Colonnes CSV supportées :
+          - timestamp_s + cpu_percent  → normalisé ÷ 100
+          - timestamp_s + load_factor  → utilisé directement
+
+        Cas d'usage pédagogiques :
+          1. Rejouer le dataset Bitbrains FastStorage pour un réalisme maximal
+          2. Rejouer une simulation Jumeaux Chauds exportée par generate_dataset.py
+          3. Comparer différentes traces sur le même modèle physique
+
+        La trace est chargée paresseusement (premier appel) et mise en cache
+        pour toute la durée de la simulation.
+        """
+        # Chargement paresseux et mise en cache
+        if self._trace is None:
+            self._trace = _TraceReplay(
+                trace_file=trace_file,
+                loop=loop,
+                speed_factor=speed_factor,
+            )
+        return self._trace.get(t)
 
 
 # ---------------------------------------------------------------------------

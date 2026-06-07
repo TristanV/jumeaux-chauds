@@ -1,10 +1,11 @@
 """Tests des profils de charge Phase 8.14.
 
-Valide les 4 nouveaux profils :
+Valide les 4 nouveaux profils (8.14A) + trace_replay (8.14B) :
   - multi_scale_sine  : superposition de 3 sinusoïdes
   - perlin_noise      : bruit de Perlin multi-octaves
   - markov_chain      : chaîne de Markov 4 états
   - composite_stress  : profil composite haute fidélité
+  - trace_replay      : rejeu de trace CSV (8.14B)
 
 Propriétés testées :
   1. Sortie dans [0, 1] pour tout t
@@ -13,13 +14,18 @@ Propriétés testées :
   4. Markov : transitions entre états valides
   5. composite_stress : dérive monotone sur la composante drift
   6. Rétrocompatibilité : sine_wave et ramp_with_spikes inchangés
+  7. trace_replay : chargement CSV, interpolation, loop, normalisation
 """
 from __future__ import annotations
+
+import csv
+import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from simulation.scenarios import LoadProfileConfig, ScenarioEngine, _Perlin1D
+from simulation.scenarios import LoadProfileConfig, ScenarioEngine, _Perlin1D, _TraceReplay
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +379,175 @@ class TestBackwardCompatibility:
 
 # ---------------------------------------------------------------------------
 # Tous les profils restent dans [0, 1] — test paramétrique
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Fixtures CSV temporaires pour trace_replay
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def cpu_trace_csv(tmp_path: Path) -> Path:
+    """Crée un CSV avec colonne cpu_percent (format Bitbrains converti)."""
+    path = tmp_path / "test_cpu_trace.csv"
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["timestamp_s", "cpu_percent", "mem_percent", "net_in_kbps", "net_out_kbps"])
+        for i in range(20):
+            ts = i * 300  # 5 min entre points
+            cpu = 20.0 + 60.0 * (i / 19.0)  # montée de 20% à 80%
+            writer.writerow([ts, round(cpu, 2), 50.0, 10.0, 5.0])
+    return path
+
+
+@pytest.fixture
+def load_factor_csv(tmp_path: Path) -> Path:
+    """Crée un CSV avec colonne load_factor (format generate_dataset.py)."""
+    path = tmp_path / "test_load_factor.csv"
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["timestamp_s", "load_factor", "temperature_c", "power_w"])
+        for i in range(10):
+            ts = i * 100
+            load = 0.3 + 0.05 * i  # montée de 0.30 à 0.75
+            writer.writerow([ts, round(load, 4), 45.0, 200.0])
+    return path
+
+
+# ---------------------------------------------------------------------------
+# Tests _TraceReplay (unitaires)
+# ---------------------------------------------------------------------------
+
+class TestTraceReplay:
+    """Tests unitaires de _TraceReplay."""
+
+    def test_load_cpu_percent(self, cpu_trace_csv: Path) -> None:
+        """Charge un CSV cpu_percent et normalise en [0,1]."""
+        tr = _TraceReplay(str(cpu_trace_csv))
+        assert tr.n_points == 20
+        # Au début : cpu=20% → load=0.20
+        assert tr.get(0.0) == pytest.approx(0.20, abs=0.01)
+        # À la fin (5700s) : cpu≈80% → load≈0.80
+        assert tr.get(5700.0) == pytest.approx(0.80, abs=0.02)
+
+    def test_load_factor_direct(self, load_factor_csv: Path) -> None:
+        """Charge un CSV load_factor (utilisé directement sans normalisation)."""
+        tr = _TraceReplay(str(load_factor_csv))
+        assert tr.n_points == 10
+        assert tr.get(0.0) == pytest.approx(0.30, abs=0.01)
+
+    def test_output_in_range(self, cpu_trace_csv: Path) -> None:
+        """Toutes les valeurs interpolées sont dans [0, 1]."""
+        tr = _TraceReplay(str(cpu_trace_csv))
+        for t in range(0, int(tr.duration_s) + 1, 60):
+            v = tr.get(float(t))
+            assert 0.0 <= v <= 1.0, f"get({t}) = {v} hors [0,1]"
+
+    def test_interpolation_monotone(self, cpu_trace_csv: Path) -> None:
+        """Entre deux points de trace à charge croissante, l'interpolation est monotone."""
+        tr = _TraceReplay(str(cpu_trace_csv), loop=False)
+        # La trace est une montée linéaire → l'interpolation doit aussi monter
+        loads = [tr.get(float(t)) for t in range(0, 5700, 100)]
+        for i in range(len(loads) - 1):
+            assert loads[i+1] >= loads[i] - 0.001, \
+                f"Interpolation non monotone à t={i*100}: {loads[i]:.3f} → {loads[i+1]:.3f}"
+
+    def test_loop_repeats(self, load_factor_csv: Path) -> None:
+        """Avec loop=True, la valeur en t=0 et t=durée sont proches."""
+        tr = _TraceReplay(str(load_factor_csv), loop=True)
+        v_start = tr.get(0.0)
+        v_after_loop = tr.get(tr.duration_s)
+        # Après exactement une durée, on revient au début
+        assert abs(v_after_loop - v_start) < 0.05, \
+            f"Loop incohérent : t=0 → {v_start:.3f}, t=duration → {v_after_loop:.3f}"
+
+    def test_no_loop_clamps_at_end(self, load_factor_csv: Path) -> None:
+        """Avec loop=False, les valeurs au-delà de la trace restent constantes."""
+        tr = _TraceReplay(str(load_factor_csv), loop=False)
+        v_end = tr.get(tr.duration_s)
+        v_beyond = tr.get(tr.duration_s * 10)
+        assert v_end == pytest.approx(v_beyond, abs=0.001)
+
+    def test_speed_factor_compression(self, cpu_trace_csv: Path) -> None:
+        """speed_factor=2.0 → la trace dure 2× plus longtemps dans la simulation."""
+        tr_normal = _TraceReplay(str(cpu_trace_csv), speed_factor=1.0)
+        tr_slow = _TraceReplay(str(cpu_trace_csv), speed_factor=2.0)
+        # À t=300s, tr_slow doit être à t_trace=150s (mi-chemin de tr_normal à t=150s)
+        v_normal_150 = tr_normal.get(150.0)
+        v_slow_300 = tr_slow.get(300.0)
+        assert abs(v_normal_150 - v_slow_300) < 0.02, \
+            f"speed_factor=2.0 : attendu {v_normal_150:.3f}, obtenu {v_slow_300:.3f}"
+
+    def test_file_not_found_raises(self, tmp_path: Path) -> None:
+        """Un chemin inexistant lève FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            _TraceReplay(str(tmp_path / "inexistant.csv"))
+
+    def test_missing_column_raises(self, tmp_path: Path) -> None:
+        """Un CSV sans colonne de charge lève ValueError."""
+        bad_csv = tmp_path / "bad.csv"
+        bad_csv.write_text("timestamp_s,temperature_c\n0,45.0\n300,50.0\n")
+        with pytest.raises(ValueError, match="load_factor.*cpu_percent"):
+            _TraceReplay(str(bad_csv))
+
+    def test_missing_timestamp_raises(self, tmp_path: Path) -> None:
+        """Un CSV sans timestamp_s lève ValueError."""
+        bad_csv = tmp_path / "no_ts.csv"
+        bad_csv.write_text("time,cpu_percent\n0,40\n300,50\n")
+        with pytest.raises(ValueError, match="timestamp_s"):
+            _TraceReplay(str(bad_csv))
+
+    def test_duration_property(self, cpu_trace_csv: Path) -> None:
+        """duration_s est correct (dernier timestamp - premier)."""
+        tr = _TraceReplay(str(cpu_trace_csv))
+        # 20 points à 300s d'intervalle : durée = 19 × 300 = 5700s
+        assert tr.duration_s == pytest.approx(5700.0, abs=1.0)
+
+
+# ---------------------------------------------------------------------------
+# Tests ScenarioEngine trace_replay (intégration)
+# ---------------------------------------------------------------------------
+
+class TestTraceReplayEngine:
+    """Tests d'intégration via ScenarioEngine."""
+
+    def test_engine_trace_replay_in_range(self, cpu_trace_csv: Path) -> None:
+        """Le profil trace_replay via ScenarioEngine reste dans [0, 1]."""
+        eng = make_engine("trace_replay",
+                          trace_file=str(cpu_trace_csv),
+                          loop=True, speed_factor=1.0)
+        loads = [eng.get_load_factor(float(t)) for t in range(0, 10000, 100)]
+        assert all(0.0 <= v <= 1.0 for v in loads), "Valeur hors [0,1]"
+
+    def test_engine_trace_replay_varies(self, cpu_trace_csv: Path) -> None:
+        """Le profil trace_replay produit un signal non constant."""
+        eng = make_engine("trace_replay",
+                          trace_file=str(cpu_trace_csv),
+                          loop=True, speed_factor=1.0)
+        loads = [eng.get_load_factor(float(t)) for t in range(0, 6000, 300)]
+        assert max(loads) - min(loads) > 0.1, "Signal trace trop plat"
+
+    def test_engine_real_trace_embedded(self) -> None:
+        """Le fichier de trace embarqué est chargeable via ScenarioEngine."""
+        # Utiliser le chemin relatif depuis la racine du projet
+        eng = make_engine("trace_replay",
+                          trace_file="data/traces/bitbrains_week_vm00.csv",
+                          loop=True, speed_factor=1.0)
+        v = eng.get_load_factor(0.0)
+        assert 0.0 <= v <= 1.0
+
+    def test_engine_trace_bounded(self, load_factor_csv: Path) -> None:
+        """Propriété universelle : [0,1] sur toute la durée de simulation."""
+        eng = make_engine("trace_replay",
+                          trace_file=str(load_factor_csv),
+                          loop=True, speed_factor=1.0)
+        times = list(range(0, 5000, 50))
+        out = [(t, eng.get_load_factor(float(t)))
+               for t in times if not (0.0 <= eng.get_load_factor(float(t)) <= 1.0)]
+        assert not out, f"Valeurs hors [0,1] : {out[:3]}"
+
+
+# ---------------------------------------------------------------------------
+# Tous les profils restent dans [0, 1] — test paramétrique (étendu Phase 8.14B)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("ptype,params", [

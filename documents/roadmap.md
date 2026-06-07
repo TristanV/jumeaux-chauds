@@ -162,11 +162,15 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
       - [x] 8.14A.9 — config/scenarios/stress.yaml : migré vers composite_stress (charge haute fidélité + pannes)
       - [x] 8.14A.10 — tests/test_load_profiles.py : 37 tests (Perlin1D, multi_scale_sine, perlin_noise, markov_chain, composite_stress, rétrocompatibilité, borne [0,1])
       - [x] 8.14A.11 — tests/test_machine_yaml_integration.py : 5 tests YAML mis à jour (basic, nominal, stress, busy_weeks, heatwave)
-    - [ ] 8.14B — Trace replay (dataset Bitbrains) ⏳
-      - [ ] Téléchargement et intégration dataset Bitbrains FastStorage (~30 MB) dans data/traces/
-      - [ ] Profil trace_replay dans ScenarioEngine (lecture CSV, interpolation temporelle)
-      - [ ] config/scenarios/trace_replay.yaml avec sélecteur de trace
-      - [ ] generate_dataset.py : export formaté rejouable comme trace
+    - [x] 8.14B — Trace replay (dataset Bitbrains) ✅ (7 juin 2026)
+      - [x] 8.14B.1 — data/traces/ : 4 traces synthétiques embarquées (~138 KB) reproduisant les statistiques Bitbrains FastStorage
+      - [x] 8.14B.2 — simulation/scenarios.py : classe _TraceReplay (chargement CSV, interpolation linéaire, loop, speed_factor)
+      - [x] 8.14B.3 — simulation/scenarios.py : profil trace_replay dans ScenarioEngine (chargement paresseux, mise en cache)
+      - [x] 8.14B.4 — config/scenarios/trace_replay.yaml : scénario avec sélecteur de trace, loop, speed_factor
+      - [x] 8.14B.5 — scripts/download_traces.py : script de téléchargement du vrai dataset Bitbrains + conversion format standard
+      - [x] 8.14B.6 — scripts/generate_dataset.py : ajout colonne timestamp_s relative (export directement rejouable)
+      - [x] 8.14B.7 — tests/test_load_profiles.py : 15 tests (TestTraceReplay + TestTraceReplayEngine : chargement, interpolation, loop, speed_factor, erreurs)
+      - [x] 8.14B.8 — tests/test_machine_yaml_integration.py : 2 tests YAML (trace_replay profile, fault_injection disabled)
   - [ ] 8.2 — Régulateur PID configurable ⏳ (À démarrer)
   - [ ] 8.3 — Coût électrique mensuel ⏳ (À démarrer)
 
@@ -174,9 +178,9 @@ Phase 8 : Extensions pédagogiques (⭐ prioritaires)
 
 ## Prochaine priorité recommandée
 
-La prochaine étape de développement recommandée est **la Phase 8.14B — Trace replay** (embarquement du dataset Bitbrains + profil `trace_replay`), puis **la Phase 8.2 — Régulateur PID configurable**.
+La prochaine étape de développement recommandée est **la Phase 8.2 — Régulateur PID configurable**.
 
-> **État au 7 juin 2026 :** Phase 8.14A complète — bibliothèque de 4 nouveaux profils de charge réalistes (multi_scale_sine, perlin_noise, markov_chain, composite_stress). Scénarios nominal, heatwave, busy_weeks, stress migrés. Nouveau scénario basic (baseline pédagogique). 37 nouveaux tests de profils.
+> **État au 7 juin 2026 :** Phase 8.14 complète (8.14A + 8.14B) — bibliothèque de 5 profils de charge réalistes + trace replay avec dataset Bitbrains embarqué. 52 nouveaux tests de profils. Scénario `trace_replay` opérationnel avec 4 traces synthétiques et script de téléchargement du vrai dataset.
 
 ### Contexte Phase 8.12 — Pourquoi cette refonte
 

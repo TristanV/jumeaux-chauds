@@ -1,0 +1,42 @@
+simulation:
+  mode: "trace_replay"
+  tick_rate_hz: 10.0
+  events_per_sec: 1.0
+  duration: "0"
+
+  # Phase 8.14B : trace_replay — rejoue une trace CSV réelle
+  #
+  # Cas d'usage :
+  #   1. Traces Bitbrains FastStorage (vm compute/memory/mixed, 3j ou 1 semaine)
+  #   2. Traces exportées par scripts/generate_dataset.py
+  #
+  # Valeur pédagogique :
+  #   - Les algorithmes de maintenance prédictive sont testés sur des données réelles
+  #   - Impossible de sur-apprendre un motif mathématique (pas de sinusoïde, pas de Perlin)
+  #   - Permet la comparaison directe avec les résultats publiés (benchmark reproductible)
+  #
+  # Trace disponibles (data/traces/) :
+  #   bitbrains_week_vm00.csv    — 1 semaine, VM mixte (défaut)
+  #   bitbrains_compute_vm01.csv — 3 jours, VM compute-intensive
+  #   bitbrains_memory_vm07.csv  — 3 jours, VM memory-intensive
+  #   bitbrains_mixed_vm14.csv   — 3 jours, VM mixte
+  #   <votre_export>.csv         — export generate_dataset.py (colonne load_factor)
+  load_profile:
+    type: "trace_replay"
+    trace_file: "data/traces/bitbrains_week_vm00.csv"
+    loop: true           # rejouer en boucle après la fin de la trace
+    speed_factor: 1.0    # 1.0 = durée réelle de la trace
+                         # 0.5 = trace jouée 2× plus vite (simulation accélérée)
+                         # 2.0 = trace jouée 2× plus lentement
+
+  noise:
+    enabled: true
+    temperature_std_c: 0.3
+    spike_probability: 0.001
+    spike_magnitude_c: 1.5
+    drift:
+      enabled: false
+      rate_c_per_s: 0.0
+
+  fault_injection:
+    enabled: false       # désactivé par défaut pour isoler l'effet de la trace

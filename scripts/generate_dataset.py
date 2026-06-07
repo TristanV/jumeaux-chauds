@@ -155,6 +155,7 @@ def generate(
 
             rows.append({
                 "ts":              ts_iso,
+                "timestamp_s":     round(sim._t_elapsed_s, 3),   # temps simulé relatif (rejouable par trace_replay)
                 "cluster_id":      sim.cluster_id,
                 "machine_id":      machine.id,
                 "role":            machine.role,
@@ -162,7 +163,7 @@ def generate(
                 "temperature_c":   snap["temperature_c"],
                 "power_w":         snap["power_w"],
                 "energy_kwh":      snap["energy_kwh_cumulated"],
-                "load_factor":     sim._scenario_engine.get_load_factor(sim._t_elapsed_s),
+                "load_factor":     round(sim._scenario_engine.get_load_factor(sim._t_elapsed_s), 6),
                 "fan_rpm_avg":     fan_rpm_avg,
                 "fault_active":    fault_active,
                 "fault_types":     fault_types,
@@ -306,7 +307,7 @@ Exemples :
     )
     parser.add_argument(
         "--scenario", default="nominal",
-        choices=["nominal", "stress", "heatwave", "busy_weeks"],
+        choices=["basic", "nominal", "stress", "heatwave", "busy_weeks", "trace_replay"],
         help="Scénario de simulation (défaut: nominal)",
     )
     parser.add_argument(

@@ -274,8 +274,20 @@ cluster:
 | `perlin_noise` | Bruit Perlin multifractal — charge organique non répétitive | `base_load`, `amplitude`, `scale`, `n_octaves`, `persistence`, `drift_rate`, `drift_max` |
 | `markov_chain` | Chaîne de Markov 4 états : idle / moderate / heavy / burst | `state_loads`, `transition_matrix`, `mean_dwell_s`, `noise_std` |
 | `composite_stress` | Cycles + dérive thermique bornée + spikes incidents + texture Perlin | `base_load`, `daily_amplitude`, `drift_rate`, `drift_max`, `spike_probability`, `spike_magnitude`, `perlin_scale`, `perlin_amplitude`, `perlin_octaves` |
+| `trace_replay` | Rejeu d'une trace CSV réelle — interpolation linéaire, loop, speed_factor | `trace_file`, `loop`, `speed_factor` |
 
-**Note d'implémentation :** `_Perlin1D` est implémenté en pure numpy dans `simulation/scenarios.py` — aucune dépendance externe.
+**Note d'implémentation :** `_Perlin1D` est implémenté en pure numpy dans `simulation/scenarios.py` — aucune dépendance externe. `_TraceReplay` supporte les colonnes `cpu_percent` (format Bitbrains) et `load_factor` (format `generate_dataset.py`).
+
+**Traces embarquées (`data/traces/`) :**
+
+| Fichier | Durée | Type | Source |
+|---------|-------|------|--------|
+| `bitbrains_week_vm00.csv` | 1 semaine (168h) | VM mixte | Synthétique (stats Bitbrains) |
+| `bitbrains_compute_vm01.csv` | 3 jours (72h) | VM compute | Synthétique |
+| `bitbrains_memory_vm07.csv` | 3 jours (72h) | VM memory | Synthétique |
+| `bitbrains_mixed_vm14.csv` | 3 jours (72h) | VM mixte | Synthétique |
+
+Le vrai dataset Bitbrains FastStorage (~30 MB) peut être téléchargé avec `scripts/download_traces.py`.
 
 ### 4.3 `config/scenarios/basic.yaml` (baseline pédagogique)
 
@@ -1187,7 +1199,7 @@ mosquitto_sub -h localhost -t "dt/cluster_alpha/+/fault" -v
 | ⭐ | MQTT | Observer MQTT Explorer / mosquitto_sub | ✅ 8.1 | 1h |
 | ⭐ | API | Tester tous les endpoints depuis `/docs` (OpenAPI auto-générée) | ✅ 7.3 | 1h |
 | ⭐ | Config | Bibliothèque de profils de charge (`multi_scale_sine`, `perlin_noise`, `markov_chain`, `composite_stress`) | ✅ 8.14A | 8h |
-| ⭐⭐ | Config | Trace replay : rejouer une trace CSV temps réel (`trace_replay`) | ⏳ 8.14B | 4h |
+| ⭐⭐ | Config | Trace replay : rejouer une trace CSV temps réel (`trace_replay`) | ✅ 8.14B | 4h |
 | ⭐⭐ | Dashboard | Ajouter un graphe candlestick OHLC sur `temp_cpu` (fenêtres 60s) | ⏳ | 4h |
 | ⭐⭐ | Physique | Remplacer le régulateur proportionnel par un **PID** configurable | ⏳ 8.2 | 6h |
 | ⭐⭐ | Storage | Activer le profil `storage`, configurer un dashboard Grafana | ✅ 6.3 | 3h |

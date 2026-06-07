@@ -137,6 +137,7 @@ pytest tests/ -v --cov=simulation --cov=config          # 5 min
 | **heatwave** | `multi_scale_sine` | Vague de chaleur — charge de fond élevée + pics journaliers marqués |
 | **busy_weeks** | `perlin_noise` | Semaines chargées — charge organique continue, aucun motif répétitif détectable |
 | **stress** | `composite_stress` | Stress haute fidélité — cycles + dérive thermique progressive + spikes incidents + texture Perlin |
+| **trace_replay** | `trace_replay` | Rejoue une trace CSV réelle (Bitbrains FastStorage ou export `generate_dataset.py`) |
 
 **Profils de charge disponibles :**
 
@@ -148,6 +149,7 @@ pytest tests/ -v --cov=simulation --cov=config          # 5 min
 | `perlin_noise` | Bruit Perlin multifractal — organique et non répétitif |
 | `markov_chain` | Chaîne de Markov 4 états (idle/moderate/heavy/burst) |
 | `composite_stress` | Combinaison : cycles + dérive + spikes + texture Perlin |
+| `trace_replay` | Rejeu CSV : interpolation linéaire, loop, speed_factor configurable |
 
 ```bash
 # Exemples
@@ -156,6 +158,12 @@ python scripts/run_simulator.py --scenario nominal --duration 10m
 python scripts/run_simulator.py --scenario heatwave --duration 24h
 python scripts/run_simulator.py --scenario busy_weeks --duration 7d
 python scripts/run_simulator.py --scenario stress --duration 1h
+python scripts/run_simulator.py --scenario trace_replay --duration 72h
+
+# Télécharger le vrai dataset Bitbrains (~30 MB)
+python scripts/download_traces.py
+# Lister les traces disponibles
+python scripts/download_traces.py --list
 ```
 
 ---
@@ -197,11 +205,13 @@ Extensions pédagogiques prioritaires
   - Simulation **OFF par défaut** au lancement Docker (variable `SIMULATION_AUTOSTART=0`)
   - Bandeau de contrôle rapide Streamlit : ▶ Démarrer / ⏸ Pause / ▶ Reprendre / ⏹ Arrêter / 🗑 Reset
   - API : `GET /simulation/status`, `POST /simulation/start|pause|resume|stop`
-- 8.14 Bibliothèque de profils de charge réalistes ✅ (Phase A)
-  - 4 nouveaux profils : `multi_scale_sine`, `perlin_noise`, `markov_chain`, `composite_stress`
+- 8.14 Bibliothèque de profils de charge réalistes ✅ (8.14A + 8.14B)
+  - 5 nouveaux profils : `multi_scale_sine`, `perlin_noise`, `markov_chain`, `composite_stress`, `trace_replay`
   - Implémentation pure numpy — aucune dépendance externe (`_Perlin1D` intégré)
-  - 5 scénarios mis à jour : `basic` (nouveau), `nominal`, `heatwave`, `busy_weeks`, `stress`
-  - 37 nouveaux tests de profils (`tests/test_load_profiles.py`)
+  - 6 scénarios : `basic` (nouveau), `nominal`, `heatwave`, `busy_weeks`, `stress`, `trace_replay` (nouveau)
+  - Dataset Bitbrains synthétique embarqué dans `data/traces/` (~138 KB, 4 traces)
+  - `scripts/download_traces.py` pour télécharger le vrai dataset Bitbrains (~30 MB)
+  - 52 nouveaux tests (`tests/test_load_profiles.py`)
 - 8.2 Régulateur PID configurable ⏳ (planifié)
 - 8.3 Projection coût électrique mensuel ⏳ (planifié)
 

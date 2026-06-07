@@ -416,6 +416,22 @@ class TestLoadProfileConfig:
         assert lp.type == "multi_scale_sine"
         assert lp.base_load == pytest.approx(0.58)
 
+    def test_trace_replay_profile(self) -> None:
+        """Vérifie que trace_replay se charge correctement (Phase 8.14B)."""
+        cfg = load_config("trace_replay")
+
+        assert cfg.simulation.mode == "trace_replay"
+        lp = cfg.simulation.load_profile
+        assert lp.type == "trace_replay"
+        assert lp.loop is True
+        assert lp.speed_factor == pytest.approx(1.0)
+        assert "bitbrains" in lp.trace_file
+
+    def test_trace_replay_fault_injection_disabled(self) -> None:
+        """Le scénario trace_replay désactive fault_injection par défaut."""
+        cfg = load_config("trace_replay")
+        assert cfg.simulation.fault_injection.enabled is False
+
 
 class TestMQTTConfiguration:
     """Tests de la configuration MQTT."""
